@@ -8,9 +8,7 @@ todo:
     -accept any arguments through stdin as well as the usual way.
     -pypy support.
   -etc:
-    -support 16bit png output.
     -accept pam files as input and as an output format.
-    -allow tiny pygame previews of a file under construction.
     -user-defined kernels:
       -transform data in transit to another application.
       -output in multiple resolutions.
@@ -390,7 +388,7 @@ keyword_arg_descriptions = {
     "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
     "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
 }  
-keyword_args = {"access-order": "yxc", "swizzle": None}
+keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8}
 # in the future, it will be possible to use a similar looking definition to specify flatter data.
 # e.g.: 
 #   "yxc" -> [[[y0x0c0, y0x0c1], [y0x1c0, y0x1c1]], [[y1x0c0...]...]].
@@ -435,8 +433,9 @@ if len(sys.argv[0]) > 0: # if being run as a command:
                 exit(2)
         else:
             nonoption_args.append(arg)
-    #for testValue in keyword_args.values():
-    #    assert testValue is not None, keyword_args
+            
+    if keyword_args["swizzle"] is not None:
+        raise NotImplementedError("swizzle")
 
     assert len(nonoption_args) == 2
 
@@ -445,7 +444,7 @@ if len(sys.argv[0]) > 0: # if being run as a command:
     assert ".png" in prog_save_filename
 
     if nonoption_args[1] == "-":
-        run_streaming(prog_save_filename)
+        run_streaming(prog_save_filename, int(keyword_args["channel-count"]), int(keyword_args["channel-depth"]))
         print("run_streaming is over.")
     else:
         prog_data = eval(nonoption_args[1])
