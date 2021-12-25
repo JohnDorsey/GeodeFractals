@@ -24,20 +24,21 @@ import itertools
 import time
 import collections
 
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-try:
-    import pygame
-except ImportError:
-    pygame = None
+
     
-try:
-    import png
-except ImportError:
-    png = None
+import png
 
 NOT_IMPLEMENTED_ERRLVL = 255
 
+
+def measure_time(input_fun):
+    def alt_fun(*args, **kwargs):
+        startTime=time.time()
+        input_fun(*args, **kwargs)
+        endTime=time.time()
+        totalTime = endTime-startTime
+        print("took {} seconds ({} minutes).".format(totalTime, totalTime/60))
+    return alt_fun
 
 
 def gen_take_only(input_gen, count):
@@ -49,11 +50,13 @@ def gen_take_only(input_gen, count):
         yield currentItem
     return
     
+    
 def gen_make_inexhaustible(input_gen):
     for item in input_gen:
         yield item
     while True:
         yield item
+
 
 def product(input_seq):
     result = 1
@@ -70,6 +73,7 @@ def shape(data_to_test):
             break
         data_to_test = data_to_test[0]
     return result
+    
     
 def labled_shape(data_to_test, access_order):
     result = dict()
@@ -186,17 +190,7 @@ def prepare_color(color_input, channel_depths):
 
 
 
-"""
-def run_basic():
-    size = (len(data), len(data[0]))
-    surface = pygame.Surface(size)
 
-    for y, row in enumerate(data):
-        for x, item in enumerate(row):
-            pixelColor = prepare_color(item)
-            surface.set_at((x,y), pixelColor)
-    pygame.image.save(surface, filename)
-"""
 
 def channel_count_to_pypng_color_mode(count):
     assert count > 0
@@ -213,42 +207,7 @@ def encode_pypng_row(color_seq):
     return bytes([(item if item is not None else 0) for color in color_seq for item in verifiedColor(color)])
     
 
-class Canvas:
-    def __init__(self, size, library_name):
-        self.library_name = library_name
-        self.size = size
-        if self.library_name == "png":
-            self.data = [[None for x in range(size[0])] for y in range(size[1])]
-            def write_pixel(pixel_coord, pixel_color):
-                if len(pixel_color) != size[2]:
-                    # raise ValueError("tuples of size other than 3 are not yet supported when using pypng (aka \"png\")")
-                    raise ValueError("bad tuple length: {} (should be {}).".format(len(pixel_color), self.size[2]))
-                # self.data[pixel_coord[1]][pixel_coord[0]*self.size[2]:(pixel_coord[0]+1)*self.size[2]] = pixel_color
-                self.data[pixel_coord[1]][pixel_coord[0]] = pixel_color
-            def save_as(filename):
-                assert size[2] > 0
-                apparentColorMode = channel_count_to_pypng_color_mode(size[2])
-                # assert len(shape(self.data)) == 2
-                # image = png.from_array([bytes(row) for row in self.data], apparentColorMode)
-                # encodeRow = lambda inputList: 
-                image = png.from_array((encode_pypng_row(row) for row in self.data), apparentColorMode.upper())
-                try:
-                    image.save(filename)
-                except png.ProtocolError as pe:
-                    print("size={}, apparentColorMode={}.".format(size, apparentColorMode))
-                    if product(size) < 25:
-                        print(self.data)
-                    raise pe
-        elif self.library_name == "pygame":
-            self.data = pygame.Surface(self.size[:2])
-            def write_pixel(pixel_coord, pixel_color):
-                self.data.set_at(pixel_coord, pixel_color)
-            def save_as(filename):
-                pygame.image.save(self.data, filename)
-        else:
-            raise ValueError("unknown library: {}".format(library_name))
-        self.write_pixel = write_pixel
-        self.save_as = save_as
+
         
         
 
@@ -273,8 +232,7 @@ def run_nonstreaming(data, filename, library_name):
             canvas.write_pixel((x,y), pixelColor)
     canvas.save_as(filename)
     
-# def run_png(filename, data):
-#     labledDataShape = labled_shape(data, keyword_args["access-order"])
+    
     
 def gen_stdin_lines():
     #i = 0
@@ -308,7 +266,7 @@ def gen_stdin_lines():
 
         
 class PeekableGenerator:
-    #this shouldn't exist. it should be replaced with itertools.tee.
+    # this shouldn't exist. it should be replaced with itertools.tee.
     def __init__(self, source_gen):
         self.source_gen = source_gen
         self.fridge = collections.deque([])
@@ -325,14 +283,9 @@ class PeekableGenerator:
     def __iter__(self):
         return self
         
-def measure_time(input_fun):
-    def alt_fun(*args, **kwargs):
-        startTime=time.time()
-        input_fun(*args, **kwargs)
-        endTime=time.time()
-        totalTime = endTime-startTime
-        print("took {} seconds ({} minutes).".format(totalTime, totalTime/60))
-    return alt_fun
+        
+
+    
     
 def pypng_streaming_save_square(filename, row_seq, height):
     row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
@@ -340,11 +293,12 @@ def pypng_streaming_save_square(filename, row_seq, height):
     image = png.from_array(row_seq, "RGB", info={"height":height})
     image.save(filename + "_" + str(time.time()) + ".png")
     
+    
 def pypng_streaming_save_squares(filename, row_seq, height):
     peekableRowSeq = PeekableGenerator(row_seq)
     for i in itertools.count():
         try:
-            peekableRowSeq.peek() #may raise StopIteration.
+            peekableRowSeq.peek() # may raise StopIteration.
             pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, i), peekableRowSeq, height)
         except StopIteration:
             return
@@ -452,3 +406,5 @@ if len(sys.argv[0]) > 0: # if being run as a command:
 
     print("exiting python.")
     exit(0)
+else:
+    print("Not in interactive mode.")
