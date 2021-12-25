@@ -56,7 +56,37 @@ def gen_make_inexhaustible(input_gen):
         yield item
     while True:
         yield item
+        
+"""        
+def unappend(string, suffix):
+    assert string.endswith(suffix), "unappend is impossible for these inputs."
+    result = string[:-len(suffix)]
+    assert result + suffix == string
+    return result
+"""
+    
+"""
+def split_right(string, delimiter):
+     return [item[::-1] for item in string[::-1].split(delimiter[::-1])[::-1]]
+     
+assert split_right("abc","b") == ["a","c"]
+assert split_right("abbbc","bb") == ["ab","c"]
 
+    
+def rightmost_split(string, delimiter):
+    splitResult = split_right(string, delimiter)
+    if len(splitResult) in {1,2}:
+        return splitResult
+    else:
+        assert len(splitResult) > 2
+        return [delimiter.join(splitResult[:-1]), splitResult[-1]]
+"""
+
+def split_once(string, delimiter):
+    result = string.split(delimiter)
+    assert len(result) == 2
+    return result
+    
 
 def product(input_seq):
     result = 1
@@ -167,44 +197,77 @@ assert get_at(([[1,2,3],[4,5,6],[7,8,9]], [[10,20,30],[40,50,60],[70,80,90]]), {
 
 
 
-def prepare_color(color_input, channel_depths):
-    if type(color_input) in {tuple, list}:
-        for componentIndex, component in enumerate(color_input):
-            assert component >= 0
-            assert component < 2**channel_depths[componentIndex]
+def prepare_color(color_input, channel_depths=None):
+    assert isinstance(channel_depths, (tuple, list))
+    
+    if isinstance(color_input, int):
+        return prepare_color([color_input], channel_depths)  
+    elif isinstance(color_input, (tuple, list)):
         if len(color_input) == len(channel_depths):
-            return color_input
+            workingColor = color_input
+        elif len(color_input) < len(channel_depths):
+            workingColor = (color_input + type(color_input)([0]*len(channel_depths)))[:len(channel_depths)]
         else:
-            return (color_input + type(color_input)([0]*3))[:3]
-    elif isinstance(color_input, int):
-        assert 0 <= color_input
-        assert color_input < 2**channel_depths[0]
-        return (color_input, 0, 0)
+            raise ValueError("the color is too long.")
     else:
-        raise TypeError(str(type(color_input)))
+        raise TypeError("bad color type: {}.".format(type(color_input)))
         
-    #elif isinstance(item, float):
-    #    assert 0 <= item <= 1
-    #    intVal = max(0, min(255, math.floor(item*256)))
+    for componentIndex, component in enumerate(workingColor):
+        assert component >= 0
+        assert component < 2**channel_depths[componentIndex]
+        
+    return workingColor
 
 
 
 
+
+def split_pypng_mode(pypng_mode):
+    if ";" not in pypng_mode:
+        pypng_mode += ";8"
+    channelLetters, bitDepth = split_once(pypng_mode, ";")
+    bitDepth = int(bitDepth)
+    return [channelLetters, bitDepth]
+
+
+"""
+
+def gen_bytes_in_shorts(shorts_seq):
+    # this should be replaced by a general method for converting between word sizes.
+    for item in shorts_seq:
+        assert isinstance(item, int)
+        assert item >= 0
+        assert item < 65536
+        yield item // 256
+        yield item % 256
+        
+def color_to_pypng_byteints(input_color, pypng_mode="RGB;8"):
+    # this might not be needed at all.
+    channelLetters, bitDepth = split_pypng_mode(pypng_mode)
+    
+    assert len(input_color) == len(channelLetters), "bad color length."
+    
+    if bitDepth == 16:
+        return gen_bytes_in_shorts(input_color)
+    elif bitDepth == 8:
+        for item in input_color:
+            assert 0 <= item < 256
+            yield item
+    else:
+        raise NotImplementedError("can't convert at this bit depth to bytes for encoding.")
+"""
 
 
 def channel_count_to_pypng_color_mode(count):
     assert count > 0
-    return ["l", "la", "rgb", "rgba"][count-1]
+    return ["L", "LA", "RGB", "RGBA"][count-1]
 
-def encode_pypng_row(color_seq):
-    def verifiedColor(color):
-        if isinstance(color, tuple):
-            assert len(color) == 3
-            return color
-        if isinstance(color, int):
-            return (color, color, color)
-        raise TypeError(color)
-    return bytes([(item if item is not None else 0) for color in color_seq for item in verifiedColor(color)])
+def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
+    # assert isinstance(channel_depths, (tuple, list))
+    
+    channelLetters, channelDepth = split_pypng_mode(pypng_mode)
+    channelDepths = [channelDepth]*len(channelLetters)
+    return [(item if item is not None else 0) for color in color_seq for item in prepare_color(color, channel_depths=channelDepths)]
     
 
 
@@ -212,25 +275,7 @@ def encode_pypng_row(color_seq):
         
 
     
-def run_nonstreaming(data, filename, library_name):
-    labledDataShape = labled_shape(data, keyword_args["access-order"])
-    #assert "c" in labledDataShape
-    if library_name == "png":
-        channel_depths = (8,)*(labledDataShape["c"] if "c" in labledDataShape else 3)
-        #assert len(channel_depths) != 3
-    else:
-        assert library_name == "pygame"
-        channel_depths = (8, 8, 8)
-    canvas = Canvas((labledDataShape["x"], labledDataShape["y"], len(channel_depths)), library_name)
-    apparentColorMode = channel_count_to_pypng_color_mode(len(channel_depths))
-    for y in range(labledDataShape["y"]):
-        for x in range(labledDataShape["x"]):
-            pixelColorData = get_at(data, {"x":x, "y":y}, keyword_args["access-order"])
-            pixelColor = prepare_color(pixelColorData, channel_depths)
-            if keyword_args["swizzle"] is not None:
-                pixelColor = tuple(pixelColor[apparentColorMode.index(channelKey)] for channelKey in keyword_args["swizzle"])
-            canvas.write_pixel((x,y), pixelColor)
-    canvas.save_as(filename)
+
     
     
     
@@ -287,26 +332,32 @@ class PeekableGenerator:
 
     
     
-def pypng_streaming_save_square(filename, row_seq, height):
+def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
+    assert height > 0
     row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
     row_seq = gen_take_only(row_seq, height) # fix issue where pypng complains about having more rows than it needs and crashes. Kinda weird but I still love you, pypng.
-    image = png.from_array(row_seq, "RGB", info={"height":height})
+    image = png.from_array(row_seq, mode=pypng_mode, info={"height":height})
     image.save(filename + "_" + str(time.time()) + ".png")
     
     
-def pypng_streaming_save_squares(filename, row_seq, height):
+def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
+    assert height > 0
     peekableRowSeq = PeekableGenerator(row_seq)
     for i in itertools.count():
         try:
             peekableRowSeq.peek() # may raise StopIteration.
-            pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, i), peekableRowSeq, height)
+            pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, i), peekableRowSeq, height, pypng_mode=pypng_mode)
         except StopIteration:
             return
     assert False
     
     
 @measure_time
-def run_streaming(filename):
+def run_streaming(filename, channel_count=3, channel_depth=8):
+    assert 1 <= channel_count <= 4, "unsupported channel count."
+    assert 1 <= channel_depth <= 16, "unsupported channel bit depth."
+    pypng_mode = channel_count_to_pypng_color_mode(channel_count) + ";" + str(channel_depth)
+    
     simpleLineSource = gen_stdin_lines()
     notelessLineSource = (item for item in simpleLineSource if "#" not in item)
     
@@ -317,10 +368,9 @@ def run_streaming(filename):
     peekableLineSource.fridge.append(borrowedLine)
     print("length {}.".format(assumedHeight))
     
-    #iterableSource = (encodePyPngRow(eval(line)) for source in [[stolenLine], lineSource] for line in source)
-    iterableSource = (encode_pypng_row(eval(line)) for line in peekableLineSource)
+    iterableSource = (encode_pypng_row(eval(line), pypng_mode=pypng_mode) for line in peekableLineSource)
     
-    pypng_streaming_save_squares(filename, iterableSource, assumedHeight)
+    pypng_streaming_save_squares(filename, iterableSource, assumedHeight, pypng_mode=pypng_mode)
     
     
     
@@ -337,7 +387,7 @@ def get_after_keyword_match(name_to_match, arg_to_test):
 prog_args = sys.argv[1:]
 
 keyword_arg_descriptions = {
-    "access-order": "yx[c] in whatever order they must be applied to access the smallest data item in the input data.",
+    "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
     "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
 }  
 keyword_args = {"access-order": "yxc", "swizzle": None}
