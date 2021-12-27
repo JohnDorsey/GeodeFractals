@@ -22,7 +22,7 @@ import itertools
 import time
 import collections
 
-
+generator = type((i for i in range(1)))
     
 import png
 
@@ -153,8 +153,9 @@ def higher_range(input_list, iteration_order=None):
 assert [item for item in higher_range([(5,8), (1,4)])] == [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)]
 
 
-    
-def get_at(data_to_access, labled_coords, access_order, bitcatted_axes="", dissolved_axes="", labled_axis_sizes=None):
+
+
+def get_at(data_to_access, labeled_coords, access_order, bitcatted_axes="", dissolved_axes="", labeled_axis_sizes=None):
     if len(access_order) == 0:
         # return now because there is probably no more accessing (narrowing) to be done. This silently allows coords with nonsense components, though.
         return data_to_access
@@ -162,27 +163,27 @@ def get_at(data_to_access, labled_coords, access_order, bitcatted_axes="", disso
         if access_order[0] in bitcatted_axes:
             raise NotImplementedError("currently can't undo bit concatenation.")
             exit(NOT_IMPLEMENTED_ERRLVL)
-            #when implemented, it will require knowledge of the axis' max size.
-            #also, bitcatting can only apply to axes that appear consecutively and immediately before the end of access_order.
+            # when implemented, it will require knowledge of the axis' max size.
+            # also, bitcatting can only apply to axes that appear consecutively and immediately before the end of access_order.
         else:
             #return incomplete answer because narrowing can't continue. Maybe this should raise an exception.
             return data_to_access
     if len(data_to_access) == 0:
-        #return incomplete answer because the data is empty here.
+        # return incomplete answer because the data is empty here.
         return None
         
-    if access_order[0] in labled_coords:
-        ac = labled_coords[access_order[0]]
-        return get_at(data_to_access[ac], labled_coords, access_order[1:])
+    if access_order[0] in labeled_coords:
+        ac = labeled_coords[access_order[0]]
+        return get_at(data_to_access[ac], labeled_coords, access_order[1:])
     else:
-        #this is where a change from an input access order to a different output access order might be made. Any coordinate components not specified in labled_coords could be swapped to change the orientation of the data. This would involve making the recursive calls to get_at include a new element in labled_coords. let this added element be the index used in iteration.
+        # this is where a change from an input access order to a different output access order might be made. Any coordinate components not specified in labled_coords could be swapped to change the orientation of the data. This would involve making the recursive calls to get_at include a new element in labeled_coords. let this added element be the index used in iteration.
         if len(access_order) > 1 and access_order[1] in dissolved_axes:
-            assert access_order[1] in labled_axis_sizes or access_order[0] in labled_axis_sizes
+            assert access_order[1] in labeled_axis_sizes or access_order[0] in labeled_axis_sizes
             raise NotImplementedError("currently can't handle dissolved axes.")
             exit(NOT_IMPLEMENTED_ERRLVL)
-            #this is where formats like [[r g b r g b r g b ...]...] will be handled.
+            # this is where formats like [[r g b r g b r g b ...]...] will be handled.
         else:
-            return [get_at(data_to_access[i], labled_coords, access_order[1:], bitcatted_axes=bitcatted_axes, dissolved_axes=dissolved_axes, labled_axis_sizes=labled_axis_sizes) for i in range(len(data_to_access))]
+            return [get_at(data_to_access[i], labeled_coords, access_order[1:], bitcatted_axes=bitcatted_axes, dissolved_axes=dissolved_axes, labeled_axis_sizes=labeled_axis_sizes) for i in range(len(data_to_access))]
 
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2, "y":1}, "yx") == 6
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2}, "yx") == [3,6,9]
@@ -191,6 +192,56 @@ assert get_at(([[1,2,3],[4,5,6],[7,8,9]], [[10,20,30],[40,50,60],[70,80,90]]), {
 assert get_at(([[1,2,3],[4,5,6],[7,8,9]], [[10,20,30],[40,50,60],[70,80,90]]), {"x":0, "y":2}, "cyx") == [7,70]
 
 
+"""
+def slice_to_seq(input_slice):
+    args = [input_slice.start, input_slice.stop, input_slice.step]
+    if args[0] is None:
+        args[0] = 0
+    if args[1] is None:
+        return itertools.count(args[0], args[2])
+    else:
+        return range(*args)
+        
+def are_anagrams(dataA, dataB):
+    if len(dataA) != len(dataB):
+        return False
+    if dataA == dataB:
+        return True
+    return (sorted(dataA) == sorted(dataB))
+    
+
+def get_formatted(input_data, labeled_coords, input_access_order, output_access_order=None, labeled_output_types=None):
+    # includes some slow assertions involving sorting.
+    if output_access_order is None:
+        output_access_order = input_access_order
+    if len(output_access_order) < len(input_access_order):
+        output_access_order += [item for item in input_access_order if item not in output_access_order]
+    assert are_anagrams(input_access_order, output_access_order)
+    
+    if not isinstance(labeled_coords, dict):
+        raise TypeError("labeled_coords must be dict.")
+        
+    if output_access_order[0] not in labeled_coords:
+        labeled_coords[output_access_order[0]] = slice(None,None,None)
+    assert output_access_order[0] in labeled_coords
+    
+    if output_access_order[0] == input_access_order[0]:
+        perCurrentCoordGetter = lambda currentCoord: get_formatted(input_data[currentCoord], labeled_coords, input_access_order[1:], output_access_order=output_access_order[1:])
+        currentCoordSrc = labeled_coords[input_access_order[0]]
+        if isinstance(currentCoordSrc, slice):
+            currentCoordSeq = slice_to_seq(currentCoordSrc)
+            resultGen = (perCurrentCoordGetter(currentCoordB) for currentCoordB in currentCoordSeq)
+            resultOutputType = list if labeled_output_types is None else (list if output_access_order[0] not in labeled_output_types else labeled_output_types[output_access_order[0]])
+            if resultOutputType is generator:
+                return resultGen
+            else:
+                return resultOutputType(resultGen)
+        else:
+            assert isinstance(currentCoordSrc, int), "invalid coordinate type."
+            ...
+    else:
+        ...
+"""
 
 
 
