@@ -5,54 +5,74 @@
 #include <stdbool.h>
 #include <complex.h>
 #include <math.h>
-
 // on all builds before 16 nov 2021, color is decided based on drawR and drawI, and the only effect that can be applied after color is decided is iterslide.
-
-//static const char LUMABET[10] = {'.', '`', ',', '-', '~', '=', '%', '$', '&', '#'};
-//static const int LUMABET_LEN=10;
+// on probably all builds before 30 dec 2021, the seed point itself is not visited.
 
 
-// ----- constant settings --------------------
-#define CHANNEL_COUNT 3
-
-
-
-// ----- canvas settings -----------------------
-#define WIDTH 2048
-#define HEIGHT 2048
-static const int ITERLIMIT=512;
-static const int PRINT_INTERVAL=4096;
+// ----- c a n v a s   s e t t i n g s -----------------------
+#define WIDTH 4096
+#define HEIGHT 4096
+static const int ITERLIMIT=4096; //iterlimit is put in the canvas settings category because it has such a big impact on image brightness and other things here need to be adjusted accordingly.
 static const int SUPERSAMPLING=8;
+static const int PRINT_INTERVAL=4096;
 
-// ----- generation settings ---------------------------
+static const float seedbias_location_real = -0.75;
+static const float seedbias_location_imag = 0.0;
+static const float seedbias_balance_real = (2047.0/2048.0);
+static const float seedbias_balance_imag = 0.75;
+
+
+
+// ----- g e n e r a t i o n   s e t t i n g s ---------------------------
 //mandelbrot:
-//#define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci;
+#define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci;
 //julia:
-#define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15;
+//#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15;
 
 #define Z_STARTS_AT_C 1 //absolutely necessary for julia set buddhabrot generation.
 
-#define JOINT_BUDDHABROT 1
+#define JOINT_BUDDHABROT 0
 static const bool INVERT_BUDDHABROT=false;
 
-// ----- drawing settings -------------------------
+
+
+// ----- d r a w i n g   s e t t i n g s -------------------------
 #define DO_MEAN_OF_ZSEQ 0
 static const int ITERSLIDE_REAL=0;
 static const int ITERSLIDE_IMAG=0;
 //static const int POINTS_PER_LINE_SEGMENT=4096;
 
-// ----- output settings ------------------------
+
+//        ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
+// ----- | c | o | l | o | r |   | s | e | t | t | i | n | g | s | ------------
+//        -------------------------------------------------------
+
 #define LOG_COLORS 0
 #define WRAP_COLORS 0
-static const float COLOR_POWER=0.5;
-static const float COLOR_SCALE=1.0;
+static const float COLOR_POWER=0.75;
+static const float COLOR_SCALE=0.125;
 
 
 
 
-// ----- necessary settings
+// ----- n e c e s s a r y   s e t t i n g s --------------------------------------
+#define CHANNEL_COUNT 3
 static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -261,7 +281,8 @@ if ( ii == 0 ) { continue; }
 		}
 */
 
-
+/*
+//this does not obey lerp rules.
 void do_mandelbrot() {
 	int val;
 	//printf("[");
@@ -280,6 +301,11 @@ void do_mandelbrot() {
 	//printf("]");
 	return;
 }
+*/
+
+float lerp(float startVal, float endVal, float balance) {
+	return (endVal*balance)+(startVal*(1.0-balance));
+}
 
 void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int superHeight = HEIGHT*supersampling;
@@ -291,7 +317,11 @@ void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL
 			print_screen(screenArr);
 		}
 		for ( int x = 0; x < superWidth; x++) {
-			do_jointbrot_point(from_screen_coord(x, superWidth), from_screen_coord(y, superHeight), screenArr);
+			do_jointbrot_point(
+				lerp(from_screen_coord(x, superWidth), seedbias_location_real, seedbias_balance_real),
+				lerp(from_screen_coord(y, superHeight), seedbias_location_imag, seedbias_balance_imag),
+				screenArr
+			);
 			//printf("(%d,%d) ", x, y);
 		}
 	}
