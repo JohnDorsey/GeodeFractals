@@ -1,19 +1,21 @@
 #!/usr/bin/python3
 
+
 """
-todo:
-  -core:
-    -simplify. Make only streaming.
-    -replace builtin eval with a custom evaluator that has good error handling and no size limit.
-    -accept any arguments through stdin as well as the usual way.
-    -pypy support.
-  -etc:
-    -accept pam files as input and as an output format.
-    -user-defined kernels:
-      -transform data in transit to another application.
-      -output in multiple resolutions.
+    todo:
+        -core:
+            -simplify. Make only streaming.
+            -replace builtin eval with a custom evaluator that has good error handling and no size limit.
+            -accept any arguments through stdin as well as the usual way.
+            -pypy support.
+        -etc:
+            -accept pam files as input and as an output format.
+            -user-defined kernels:
+            -transform data in transit to another application.
+            -output in multiple resolutions.
 """
 
+print(__name__ + " started.")
 
 import sys
 # print(sys.argv[0])
@@ -180,7 +182,6 @@ def get_at(data_to_access, labeled_coords, access_order, bitcatted_axes="", diss
         if len(access_order) > 1 and access_order[1] in dissolved_axes:
             assert access_order[1] in labeled_axis_sizes or access_order[0] in labeled_axis_sizes
             raise NotImplementedError("currently can't handle dissolved axes.")
-            exit(NOT_IMPLEMENTED_ERRLVL)
             # this is where formats like [[r g b r g b r g b ...]...] will be handled.
         else:
             return [get_at(data_to_access[i], labeled_coords, access_order[1:], bitcatted_axes=bitcatted_axes, dissolved_axes=dissolved_axes, labeled_axis_sizes=labeled_axis_sizes) for i in range(len(data_to_access))]
@@ -313,6 +314,7 @@ def channel_count_to_pypng_color_mode(count):
 
 def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     # assert isinstance(channel_depths, (tuple, list))
+    # print("encoding row...")
     
     channelLetters, channelDepth = split_pypng_mode(pypng_mode)
     channelDepths = [channelDepth]*len(channelLetters)
@@ -331,7 +333,7 @@ def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
 def gen_stdin_lines():
     #i = 0
     for i in itertools.count():
-        print("wait. ", end="")
+        print("wait.")
         nextLine = sys.stdin.readline()
         """
         nextLineChars = []
@@ -343,7 +345,14 @@ def gen_stdin_lines():
             nextLineChars.append(newChar)
         nextLine = "".join(nextLineChars)
         """
-        print("line {} starts: {}.".format(i, nextLine[:128]))
+        if nextLine.startswith("#") or len(nextLine) < 128:
+            print("line {} is {}.".format(i, nextLine[:-1]))
+        else:
+            print("line {} is {}.".format(i, (nextLine[:60] + "... ..." + nextLine[-60:-1])))
+        
+        if nextLine.startswith("#"):
+            continue
+            
         if len(nextLine) == 0:
             print("line length zero! ending!")
             return
@@ -355,6 +364,7 @@ def gen_stdin_lines():
             return
         #if i == count:
         #    print("line will not be supplied")
+        # print("yielding plaintext line.")
         yield nextLine
         #i += 1
 
@@ -385,8 +395,12 @@ def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
     assert height > 0
     row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
     row_seq = gen_take_only(row_seq, height) # fix issue where pypng complains about having more rows than it needs and crashes. Kinda weird but I still love you, pypng.
+    print("preparing to save file...")
     image = png.from_array(row_seq, mode=pypng_mode, info={"height":height})
-    image.save(filename + "_" + str(time.time()) + ".png")
+    finalFilename = filename + "_" + str(time.time()) + ".png"
+    print("saving file {}...".format(finalFilename))
+    image.save(finalFilename)
+    print("finished saving file {}.".format(finalFilename))
     
     
 def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
@@ -394,7 +408,9 @@ def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
     peekableRowSeq = PeekableGenerator(row_seq)
     for i in itertools.count():
         try:
+            print("peeking at row seq...")
             peekableRowSeq.peek() # may raise StopIteration.
+            print("done peeking.")
             pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, i), peekableRowSeq, height, pypng_mode=pypng_mode)
         except StopIteration:
             return
@@ -459,7 +475,7 @@ optional arguments:
 --help displays this message.
 there are some others but they aren't documented yet."""
 
-    
+print(__name__ + ": now loading args.")
 
 if len(sys.argv[0]) > 0: # if being run as a command:
     if len(prog_args) == 0:
