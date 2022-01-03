@@ -436,7 +436,7 @@ def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
             print("peeking at row seq...")
             peekableRowSeq.peek() # may raise StopIteration.
             print("done peeking.")
-            pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, i), peekableRowSeq, height, pypng_mode=pypng_mode)
+            pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
         except StopIteration:
             return
     assert False
