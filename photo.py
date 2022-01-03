@@ -15,10 +15,10 @@
             -output in multiple resolutions.
 """
 
-print(__name__ + " started.")
-
 import sys
-# print(sys.argv[0])
+
+print(sys.argv[0] + " started.")
+
 import math
 import itertools
 import time
@@ -29,6 +29,8 @@ generator = type((i for i in range(1)))
 import png
 
 NOT_IMPLEMENTED_ERRLVL = 255
+
+
 
 
 def measure_time(input_fun):
@@ -57,13 +59,21 @@ def gen_make_inexhaustible(input_gen):
     while True:
         yield item
         
-"""        
+
+
 def unappend(string, suffix):
     assert string.endswith(suffix), "unappend is impossible for these inputs."
     result = string[:-len(suffix)]
     assert result + suffix == string
     return result
-"""
+    
+    
+def unprepend(string, prefix):
+    assert string.startswith(prefix), "unprepend is impossible for these inputs."
+    result = string[len(suffix):]
+    assert prefix + result == string
+    return result
+
     
 """
 def split_right(string, delimiter):
@@ -333,9 +343,16 @@ def color_to_pypng_byteints(input_color, pypng_mode="RGB;8"):
 """
 
 
-def channel_count_to_pypng_color_mode(count):
+def channel_count_to_pypng_color_letters(count):
     assert count > 0
     return ["L", "LA", "RGB", "RGBA"][count-1]
+    
+def format_pypng_mode(channel_count=None, channel_depth=None):
+    assert (channel_count is not None) and (channel_depth is not None)
+    assert 1 <= channel_count <= 4, "unsupported channel count."
+    assert 1 <= channel_depth <= 16, "unsupported channel bit depth."
+    return channel_count_to_pypng_color_letters(channel_count) + ";" + str(channel_depth)
+    
 
 def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     # assert isinstance(channel_depths, (tuple, list))
@@ -356,7 +373,6 @@ def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     
     
 def gen_stdin_lines():
-    #i = 0
     for i in itertools.count():
         print("wait.")
         nextLine = sys.stdin.readline()
@@ -375,8 +391,8 @@ def gen_stdin_lines():
         else:
             print("line {} is {}.".format(i, (nextLine[:60] + "... ..." + nextLine[-60:-1])))
         
-        if nextLine.startswith("#"):
-            continue
+        # if nextLine.startswith("#"):
+        #     continue
             
         if len(nextLine) == 0:
             print("line length zero! ending!")
@@ -391,7 +407,6 @@ def gen_stdin_lines():
         #    print("line will not be supplied")
         # print("yielding plaintext line.")
         yield nextLine
-        #i += 1
 
         
 class PeekableGenerator:
@@ -399,16 +414,25 @@ class PeekableGenerator:
     def __init__(self, source_gen):
         self.source_gen = source_gen
         self.fridge = collections.deque([])
-    def peek(self):
+    
+    def _unlock_once(self):
         result = next(self.source_gen)
         self.fridge.append(result)
         return result
+        
+    def peek_at_relative(self, index):
+        assert index >= 0
+        while len(self.fridge) <= index:
+            self._unlock_once()
+        return self.fridge[index]
+        
     def __next__(self):
         if len(self.fridge) != 0:
             result = self.fridge.popleft()
             return result
         else:
             return next(self.source_gen)
+            
     def __iter__(self):
         return self
         
@@ -417,50 +441,59 @@ class PeekableGenerator:
     
     
 def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
-    assert height > 0
+    assert height > 0, height
+    assert filename.endswith(".png"), filename
     row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
     row_seq = gen_take_only(row_seq, height) # fix issue where pypng complains about having more rows than it needs and crashes. Kinda weird but I still love you, pypng.
     print("preparing to save file...")
     image = png.from_array(row_seq, mode=pypng_mode, info={"height":height})
-    finalFilename = filename + "_" + str(time.time()) + ".png"
+    finalFilename = unappend(filename, ".png") + "_" + str(time.time()) + ".png"
     print("saving file {}...".format(finalFilename))
     image.save(finalFilename)
     print("finished saving file {}.".format(finalFilename))
     
     
 def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
-    assert height > 0
+    assert height > 0, height
+    assert filename.endswith(".png"), filename
     peekableRowSeq = PeekableGenerator(row_seq)
     for i in itertools.count():
         try:
             print("peeking at row seq...")
-            peekableRowSeq.peek() # may raise StopIteration.
+            peekableRowSeq.peek_at_relative(0) # may raise StopIteration.
             print("done peeking.")
-            pypng_streaming_save_square(filename+"_{}px{}inseq".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
+            pypng_streaming_save_square(unappend(filename, ".png")+"_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
         except StopIteration:
             return
     assert False
     
     
+    
+    
 @measure_time
-def run_streaming(filename, channel_count=3, channel_depth=8):
-    assert 1 <= channel_count <= 4, "unsupported channel count."
-    assert 1 <= channel_depth <= 16, "unsupported channel bit depth."
-    pypng_mode = channel_count_to_pypng_color_mode(channel_count) + ";" + str(channel_depth)
+def run_streaming():
     
     simpleLineSource = gen_stdin_lines()
-    notelessLineSource = (item for item in simpleLineSource if "#" not in item)
+    notelessLineSource = (item for item in simpleLineSource if not item.startswith("#"))
     
-    peekableLineSource = PeekableGenerator(notelessLineSource)
-    borrowedLine = peekableLineSource.peek()
-    assumedHeight = len(eval(borrowedLine))
-    peekableLineSource.fridge.clear()
-    peekableLineSource.fridge.append(borrowedLine)
-    print("length {}.".format(assumedHeight))
+    peekableNotelessLineSource = PeekableGenerator(notelessLineSource)
+    for i in itertools.count():
+        borrowedLine = peekableNotelessLineSource.peek_at_relative(i)
+        if borrowedLine.startswith("ARGUMENT"):
+            load_cli_arg(borrowedLine.unappend("ARGUMENT "), nonkeyword_args, keyword_args)
+            validate_args(nonkeyword_args, keyword_args)
+        else:
+            assumedHeight = len(eval(borrowedLine))
+            peekableNotelessLineSource.fridge.clear()
+            peekableNotelessLineSource.fridge.append(borrowedLine)
+            break
+    print("length is {}.".format(assumedHeight))
     
-    iterableSource = (encode_pypng_row(eval(line), pypng_mode=pypng_mode) for line in peekableLineSource)
+    filename, channelCount, channelDepth = keyword_args["output"], keyword_args["channel-count"], keyword_args["channel-depth"]
+    pypngMode = format_pypng_mode(channel_count=channelCount, channel_depth=channelDepth)
     
-    pypng_streaming_save_squares(filename, iterableSource, assumedHeight, pypng_mode=pypng_mode)
+    iterableSource = (encode_pypng_row(eval(line), pypng_mode=pypngMode) for line in peekableNotelessLineSource)
+    pypng_streaming_save_squares(filename, iterableSource, assumedHeight, pypng_mode=pypngMode)
     
     
     
@@ -480,7 +513,7 @@ keyword_arg_descriptions = {
     "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
     "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
 }  
-keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8}
+keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8, "output":"untitled{}.png".format(time.time())}
 # in the future, it will be possible to use a similar looking definition to specify flatter data.
 # e.g.: 
 #   "yxc" -> [[[y0x0c0, y0x0c1], [y0x1c0, y0x1c1]], [[y1x0c0...]...]].
@@ -489,7 +522,7 @@ keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "chan
 #   "(yxc)" -> [y0x0c0, y0x0c1, y0x1c0, y0x1c1, y1x0c0...].
 #   keep in mind that no new operations are needed to make rows come in unbound groups of three for color channels - this is the same as "(yc)x".
 
-nonoption_args = []
+nonkeyword_args = collections.deque([])
 
 USAGE_STRING = "Usage: [OPTION] <FILE> <DATA>"
 HELP_STRING = """
@@ -500,50 +533,59 @@ optional arguments:
 --help displays this message.
 there are some others but they aren't documented yet."""
 
-print(__name__ + ": now loading args.")
+
+def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
+    argSuccess = False
+    if arg_str.startswith("--"):
+        if arg_str == "--help":
+            print(HELP_STRING)
+            exit(0)
+        for keyword_arg_name in kwargs_to_edit.keys():
+            newValue = get_after_keyword_match(keyword_arg_name, arg_str)
+            if newValue is None:
+                continue
+            else:
+                kwargs_to_edit[keyword_arg_name] = newValue
+                assert kwargs_to_edit[keyword_arg_name] is not None, keyword_arg_name
+
+                argSuccess = True
+                break
+        if argSuccess == False:
+            print("unknown option: {}".format(arg_str))
+            exit(2)
+    else:
+        args_to_edit.append(arg_str)
+        
+        
+def validate_args(args_to_validate, kwargs_to_validate):
+    if kwargs_to_validate["swizzle"] is not None:
+        raise NotImplementedError("swizzle")
+    
+    assert kwargs_to_validate["output"].endswith(".png")
+    assert len(args_to_validate) <= 2
+        
+
+print(sys.argv[0] + ": now loading args.")
 
 if len(sys.argv[0]) > 0: # if being run as a command:
     if len(prog_args) == 0:
         print(USAGE_STRING)
         exit(1)
-    for arg in prog_args:
-        argSuccess = False
-        if arg.startswith("--"):
-            if arg == "--help":
-                print(HELP_STRING)
-                exit(0)
-            for keyword_arg_name in keyword_args.keys():
-                newValue = get_after_keyword_match(keyword_arg_name, arg)
-                if newValue is None:
-                    continue
-                keyword_args[keyword_arg_name] = newValue
-                assert keyword_args[keyword_arg_name] is not None, keyword_arg_name
-
-                argSuccess = True
-            if argSuccess == False:
-                print("unknown option: {}".format(arg))
-                exit(2)
-        else:
-            nonoption_args.append(arg)
+        
+    for argStr in prog_args:
+        load_cli_arg(argStr, nonkeyword_args, keyword_args)
             
-    if keyword_args["swizzle"] is not None:
-        raise NotImplementedError("swizzle")
+    validate_args(nonkeyword_args, keyword_args)
 
-    assert len(nonoption_args) == 2
+    keyword_args["output"] = nonkeyword_args.popleft()
+    
+    validate_args(nonkeyword_args, keyword_args)
 
-    prog_save_filename = nonoption_args[0]
-    assert len(prog_save_filename) > 0
-    assert ".png" in prog_save_filename
-
-    if nonoption_args[1] == "-":
-        run_streaming(prog_save_filename, int(keyword_args["channel-count"]), int(keyword_args["channel-depth"]))
+    if nonkeyword_args[0] == "-":
+        run_streaming()
         print("run_streaming is over.")
     else:
-        prog_data = eval(nonoption_args[1])
-        assert len(shape(prog_data)) in {1, 2, 3}
-
-        run_nonstreaming(prog_data, prog_save_filename, "png")
-        print("run_nonstreaming is over.")
+        raise ValueError("data must be streaming, use '-'.")
 
     print("exiting python.")
     exit(0)
