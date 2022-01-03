@@ -10,48 +10,48 @@
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 4096
-#define HEIGHT 4096
-static const int ITERLIMIT=4096; //iterlimit is put in the canvas settings category because it has such a big impact on image brightness and other things here need to be adjusted accordingly.
+#define WIDTH 512
+#define HEIGHT 512
+static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int SUPERSAMPLING=8;
-static const int PRINT_INTERVAL=4096;
+static const int PRINT_INTERVAL=256;
+#define DO_CLEAR_ON_OUTPUT 1
+#define SWAP_ITER_ORDER 1
 
-static const float seedbias_location_real = -0.75;
+static const float seedbias_location_real = 0.0;
 static const float seedbias_location_imag = 0.0;
-static const float seedbias_balance_real = (2047.0/2048.0);
-static const float seedbias_balance_imag = 0.75;
+static const float seedbias_balance_real = 0.0;
+static const float seedbias_balance_imag = 0.0;
 
 
 
-// ----- g e n e r a t i o n   s e t t i n g s ---------------------------
+// ----- c o l o r   s e t t i n g s ----------------------
+#define LOG_COLORS 0
+#define WRAP_COLORS 0
+static const float COLOR_POWER=0.25;
+static const float COLOR_SCALE=16.0;
+
+
+
+// ----- f r a c t a l   s e t t i n g s ---------------------------
 //mandelbrot:
 #define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci;
 //julia:
 //#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15;
 
-#define Z_STARTS_AT_C 1 //absolutely necessary for julia set buddhabrot generation.
+#define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
 
 #define JOINT_BUDDHABROT 0
-static const bool INVERT_BUDDHABROT=false;
+static const bool INVERT_BUDDHABROT=true;
 
 
 
 // ----- d r a w i n g   s e t t i n g s -------------------------
+
 #define DO_MEAN_OF_ZSEQ 0
-static const int ITERSLIDE_REAL=0;
-static const int ITERSLIDE_IMAG=0;
-//static const int POINTS_PER_LINE_SEGMENT=4096;
 
-
-//        ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
-// ----- | c | o | l | o | r |   | s | e | t | t | i | n | g | s | ------------
-//        -------------------------------------------------------
-
-#define LOG_COLORS 0
-#define WRAP_COLORS 0
-static const float COLOR_POWER=0.75;
-static const float COLOR_SCALE=0.125;
-
+#define DO_VISIT_LINE_SEGMENT 0
+static const int POINTS_PER_LINE_SEGMENT=4096;
 
 
 
@@ -80,11 +80,44 @@ static const int ZERO=0;
 int min(int a, int b) {
 	return ((a<b)? a : b);
 }
+
 int max(int a, int b) {
 	return ((a<b)? b : a);
 }
 
+void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+	for (int y = 0; y < HEIGHT; y++) {
+		for (int x = 0; x < WIDTH; x++) {
+			for (int c = 0; c < CHANNEL_COUNT; c++) {
+				(*screenArr)[y][x][c] = 0;
+			}
+		}
+	}
+}
+
+void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+	int risingPixelsDrawn = 0;
+	const int bright = 255; const int dim = 0;
+	for (int y = 0; y < HEIGHT; y++) {
+		for (int x = 0; x < WIDTH; x++) {
+			if ( y == 0 ) {
+				(*screenArr)[y][x][2] = ((x%2==0)?bright:dim); // side 1: gaps of 1.
+			} else if ( y == HEIGHT - 1 ) {
+				(*screenArr)[y][x][2] = ((x%4==0)?bright:dim); // side 3: gaps of 3.
+			} else if ( x == 0 ) {
+				(*screenArr)[y][x][1] = ((y%5==0)?bright:dim); // side 4: gaps of 4.
+			} else if ( x == WIDTH - 1 ) {
+				(*screenArr)[y][x][1] = ((y%3==0)?bright:dim); // side 2: gaps of 2.
+			} else {
+				(*screenArr)[y][x][y%3] = risingPixelsDrawn;
+				risingPixelsDrawn++;
+			}
+		}
+	}
+}
+
 void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+	printf("# start of print screen.\n");
 	float floatVal;
 	int intVal;
 	for ( int y = 0; y < HEIGHT; y++ ) {
@@ -112,12 +145,7 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 		}
 		printf("]\n");
 	}
-	/* printf("[");
-	for ( int hackx = 0; hackx < WIDTH; hackx++ ) {
-		printf("254,");
-	}
-	printf("]\n");
-	*/
+	printf("# end of print screen.\n");
 	return;
 }
 
@@ -202,6 +230,41 @@ bool jointbrot_point_should_be_skipped(float cr, float ci) {
 	#endif
 }
 
+
+
+void visit_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float drawR, float drawI, float cr, float ci) {
+	int drawX = to_screen_coord(drawR, WIDTH);
+	int drawY = to_screen_coord(drawI, HEIGHT);
+
+	if ( (drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT) ) {
+		//(drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT)
+		//( ! (drawX>=WIDTH || drawX < 0 || drawY>=HEIGHT || drawY < 0) )
+		(*screenArr)[drawY][drawX][0] += 1;
+		if ( drawR > cr ) { (*screenArr)[drawY][drawX][1] += 1; }
+		if ( drawI > ci ) {	(*screenArr)[drawY][drawX][2] += 1;	}
+		//printf("draw success:");
+	} else {
+		//printf("draw failure:");
+	}
+}
+
+
+void visit_line_segment(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float initialDrawR, float initialDrawI, float finalDrawR, float finalDrawI, float cr, float ci) {
+	float drawR;
+	float drawI;
+	float realSpan = (finalDrawR - initialDrawR);
+	float imagSpan = (finalDrawI - initialDrawI);
+	float realInc = (realSpan/((float) POINTS_PER_LINE_SEGMENT));
+	float imagInc = (imagSpan/((float) POINTS_PER_LINE_SEGMENT));
+	for (int iii = 0; iii < POINTS_PER_LINE_SEGMENT; iii++) {
+		drawR = initialDrawR + realInc*(((float) iii)+1.0);
+		drawI = initialDrawI + imagInc*(((float) iii)+1.0);
+
+		visit_point(screenArr, drawR, drawI, cr, ci);
+	}
+}
+
+
 void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
 	if (jointbrot_point_should_be_skipped(cr, ci)) { return; }
@@ -235,30 +298,23 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 		}
 		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][1] += 1;
 		
-		//initialDrawR = drawR; initialDrawI = drawI;
+		#if DO_VISIT_LINE_SEGMENT
+			initialDrawR = drawR; initialDrawI = drawI;
+		#endif
+		
 		#if DO_MEAN_OF_ZSEQ
 			zrSum += zr; ziSum += zi;
 			drawR = zrSum/(ii+1.0); drawI = ziSum/(ii+1.0);
 		#else
 			drawR = zr; drawI = zi;
 		#endif
-		//finalDrawR = drawR; finalDrawI = drawI;
-		//assert(drawR==zr);
-
-		drawX = to_screen_coord(drawR, WIDTH) + (iterationIndex * ITERSLIDE_REAL);
-		drawY = to_screen_coord(drawI, HEIGHT) + (iterationIndex * ITERSLIDE_IMAG);
 		
-		if ( (drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT) ) {
-		    //(drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT)
-			//( ! (drawX>=WIDTH || drawX < 0 || drawY>=HEIGHT || drawY < 0) )
-			(*screenArr)[drawY][drawX][0] += 1;
-			if ( drawR > cr ) { (*screenArr)[drawY][drawX][1] += 1; }
-			if ( drawI > ci ) {	(*screenArr)[drawY][drawX][2] += 1;	}
-			//printf("draw success:");
-		} else {
-			//printf("draw failure:");
-		}
-		
+		#if DO_VISIT_LINE_SEGMENT
+			finalDrawR = drawR; finalDrawI = drawI;
+			visit_line_segment(screenArr, initialDrawR, initialDrawI, finalDrawR, finalDrawI, cr, ci);
+		#else
+			visit_point(screenArr, drawR, drawI, cr, ci);
+		#endif
 		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][2] += 1;
 		//printf("%f %f %d %d %d %d\n",drawR,drawI,drawX,drawY,WIDTH,HEIGHT);
 		
@@ -269,17 +325,8 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 
 
 		/* tmpZr = zr*zr - zi*zi; tmpZi = 2.0*zr*zi;	zr = tmpZr + cr; zi = tmpZi + ci; */
-/*
-if ( ii == 0 ) { continue; }
-		for (iii = 0; iii < POINTS_PER_LINE_SEGMENT; iii++) {
-			drawR = initialDrawR + ((finalDrawR - initialDrawR)/((float) POINTS_PER_LINE_SEGMENT))*(((float) iii)+1.0);
-			drawI = initialDrawI + ((finalDrawI - initialDrawI)/((float) POINTS_PER_LINE_SEGMENT))*(((float) iii)+1.0);
-			
-			...drawX drawY
 
-			..mark screenArr.
-		}
-*/
+
 
 /*
 //this does not obey lerp rules.
@@ -308,23 +355,42 @@ float lerp(float startVal, float endVal, float balance) {
 }
 
 void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
-	int superHeight = HEIGHT*supersampling;
-	int superWidth = WIDTH*supersampling;
+
 	printf("# buddhabrot build started.\n");
-	for ( int y = 0; y < superHeight; y++ ) {
-		if ( ((y % PRINT_INTERVAL) == 0) && (y != 0) ) {
-			printf("# %d of %d rows processed.\n", y, superHeight);
+	
+	int superHeight = HEIGHT * supersampling; int superWidth = WIDTH * supersampling;
+	int iterIA; int iterIB;
+	
+	#if SWAP_ITER_ORDER
+		int iterLimA = superHeight; int iterLimB = superWidth;
+		int (*x) = &iterIB; int (*y) = &iterIA;
+	#else
+		int iterLimA = superWidth; int iterLimB = superHeight;
+		int (*x) = &iterIA; int (*y) = &iterIB;
+	#endif
+	
+	for ( iterIB = 0; iterIB < iterLimB; iterIB++ ) {
+		if ( ((iterIB % PRINT_INTERVAL) == 0) && (iterIB != 0) ) {
+			printf("# %d of %d sample %s processed.\n", iterIB, iterLimB, ((SWAP_ITER_ORDER==1)?"columns":"rows"));
 			print_screen(screenArr);
+			#if DO_CLEAR_ON_OUTPUT
+				blank_screen(screenArr);
+			#endif
 		}
-		for ( int x = 0; x < superWidth; x++) {
+		for ( iterIA = 0; iterIA < iterLimA; iterIA++ ) {
 			do_jointbrot_point(
-				lerp(from_screen_coord(x, superWidth), seedbias_location_real, seedbias_balance_real),
-				lerp(from_screen_coord(y, superHeight), seedbias_location_imag, seedbias_balance_imag),
+				lerp(from_screen_coord((*x), superWidth), seedbias_location_real, seedbias_balance_real),
+				lerp(from_screen_coord((*y), superHeight), seedbias_location_imag, seedbias_balance_imag),
 				screenArr
 			);
 			//printf("(%d,%d) ", x, y);
 		}
 	}
+	printf("# done building buddhabrot. printing screen one more time.\n");
+	print_screen(screenArr);
+	#if DO_CLEAR_ON_OUTPUT
+		blank_screen(screenArr);
+	#endif
 }
 
 
@@ -345,10 +411,12 @@ int main(int argc, char **argv) {
 	memset(globalScreenArr, ZERO, sizeof globalScreenArr);
 	printf("# hello.c ready.\n");
 	//return 0;
+	draw_test_image(&globalScreenArr);
+	print_screen(&globalScreenArr);
+	blank_screen(&globalScreenArr);
 	build_buddhabrot(SUPERSAMPLING, &globalScreenArr);
 	//do_mandelbrot(SUPERSAMPLING, &globalScreenArr);
 	// return 0;
-	print_screen(&globalScreenArr);
 	printf("STOP");
 	return 0;
 }
