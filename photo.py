@@ -155,36 +155,61 @@ def higher_range(input_list, iteration_order=None):
 assert [item for item in higher_range([(5,8), (1,4)])] == [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)]
 
 
+def shared_items_are_consecutive(input_list, input_set, require_immediate_start=False):
+    inputItemGen = iter(input_list)
+    for item in inputItemGen:
+        if item not in input_set:
+            if require_immediate_start:
+                return False
+        else:
+            break
+    for item in inputItemGen:
+        # it doesn't matter how long the run of matches lasts.
+        # zero matches in this loop means a match run length of one, where the one match was encountered in the first loop.
+        if item not in input_set:
+            break
+    for item in inputItemGen:
+        if item in input_set:
+            return False
+    return True
+            
 
 
-def get_at(data_to_access, labeled_coords, access_order, bitcatted_axes="", dissolved_axes="", labeled_axis_sizes=None):
+def get_at_advanced(data_to_access, labeled_coords, access_order, bitcatted_axes={}, digested_axes={}, labeled_axis_sizes=None):
+    if len(bitcatted_axes) > 0:
+        assert shared_items_are_consecutive(access_order[::-1], bitcatted_axes), "bitcatted_axes much not have any gaps when compared to access order."
+        raise NotImplementedError("can't do bitcatting yet.")
+    if len(digested_axes) > 0:
+        for digestedAxis in digested_axes:
+            assert digestedAxis not in bitcatted_axes, "a bitcatted axis is stored as an integer, and can't be digested - bitcatting more than one axis is only possible by bitcatting both an axis and its parent axis."
+        raise NotImplementedError("what goes here?")
+    raise NotImplementedError()
+            
+
+def get_at(data_to_access, labeled_coords, access_order):
     if len(access_order) == 0:
         # return now because there is probably no more accessing (narrowing) to be done. This silently allows coords with nonsense components, though.
         return data_to_access
     if not hasattr(data_to_access, "__len__"):
-        if access_order[0] in bitcatted_axes:
-            raise NotImplementedError("currently can't undo bit concatenation.")
-            exit(NOT_IMPLEMENTED_ERRLVL)
-            # when implemented, it will require knowledge of the axis' max size.
-            # also, bitcatting can only apply to axes that appear consecutively and immediately before the end of access_order.
-        else:
-            #return incomplete answer because narrowing can't continue. Maybe this should raise an exception.
-            return data_to_access
+        raise IndexError("the data can't be browsed here.")
     if len(data_to_access) == 0:
-        # return incomplete answer because the data is empty here.
-        return None
+        raise IndexError("the data is empty here.")
+        # return None
         
     if access_order[0] in labeled_coords:
         ac = labeled_coords[access_order[0]]
-        return get_at(data_to_access[ac], labeled_coords, access_order[1:])
     else:
-        # this is where a change from an input access order to a different output access order might be made. Any coordinate components not specified in labled_coords could be swapped to change the orientation of the data. This would involve making the recursive calls to get_at include a new element in labeled_coords. let this added element be the index used in iteration.
-        if len(access_order) > 1 and access_order[1] in dissolved_axes:
-            assert access_order[1] in labeled_axis_sizes or access_order[0] in labeled_axis_sizes
-            raise NotImplementedError("currently can't handle dissolved axes.")
-            # this is where formats like [[r g b r g b r g b ...]...] will be handled.
-        else:
-            return [get_at(data_to_access[i], labeled_coords, access_order[1:], bitcatted_axes=bitcatted_axes, dissolved_axes=dissolved_axes, labeled_axis_sizes=labeled_axis_sizes) for i in range(len(data_to_access))]
+        ac = None
+    
+    if isinstance(ac, int):
+        return get_at(data_to_access[ac], labeled_coords, access_order[1:])
+    elif ac is None:
+        ac = slice(None, None, None)
+    else:
+        assert isinstance(ac, slice), "invalid access coordinate provided."
+    
+    # this is where a change from an input access order to a different output access order might be made. Any coordinate components not specified in labled_coords could be swapped to change the orientation of the data. This would involve making the recursive calls to get_at include a new element in labeled_coords. let this added element be the index used in iteration.
+    return [get_at(data_to_access_sub, labeled_coords, access_order[1:]) for data_to_access_sub in itertools.islice(data_to_access, ac.start, ac.stop, ac.step)]
 
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2, "y":1}, "yx") == 6
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2}, "yx") == [3,6,9]
