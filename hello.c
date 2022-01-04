@@ -34,18 +34,18 @@ static const int POINTS_PER_LINE_SEGMENT=4096;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 32768
-#define HEIGHT 32768
-static const int ITERLIMIT=4096; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
-static const int BIDIRECTIONAL_SUPERSAMPLING=2;
-static const int PRINT_INTERVAL=8192;
-#define DO_CLEAR_ON_OUTPUT 0
-#define SWAP_ITER_ORDER 0
+#define WIDTH 4096
+#define HEIGHT 4096
+static const int ITERLIMIT=1048576; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+static const int BIDIRECTIONAL_SUPERSAMPLING=4;
+static const int PRINT_INTERVAL=128;
+#define DO_CLEAR_ON_OUTPUT 1
+#define SWAP_ITER_ORDER 1
 
 static const float seedbias_location_real = 0.0;
-static const float seedbias_location_imag = 0.0;
+static const float seedbias_location_imag = -2.0;
 static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.0;
+static const float seedbias_balance_imag = 0.5;
 
 #define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
 
@@ -54,14 +54,14 @@ static const float seedbias_balance_imag = 0.0;
 static const int COLOR_BIT_DEPTH=8;
 #define WRAP_COLORS 0
 #define LOG_COLORS 0
-static const float COLOR_POWER=1.0;
+static const float COLOR_POWER=0.8;
 static const float COLOR_SCALE=1.0;
 
-#define P4 printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n");
+#define P4 assert(COLOR_SCALE > 0.001); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n");
 
 
 // ------ o u t p u t   s e t t i n g s ------------
-#define OUTPUT_ROW_SUBDIVISION 2
+#define OUTPUT_ROW_SUBDIVISION 1
 
 #define P5 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION);
 
@@ -71,6 +71,7 @@ static const float COLOR_SCALE=1.0;
 #define CHANNEL_COUNT 3
 static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
+#define BUFFER_SIZE 256
 
 // ----- unnecessary settings --------------
 #define DEFAULT_PIXEL_BRIGHTNESS 0
@@ -107,6 +108,11 @@ int int_pow(int a, int b) {
 	}
 	return result;
 }
+
+
+
+
+
 
 
 void fill_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], int fillValue) {
@@ -151,6 +157,7 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int intVal;
 	int maxVal = int_pow(2, COLOR_BIT_DEPTH);
 	for ( int y = 0; y < HEIGHT; y++ ) {
+		//printf("# start of row %d.\n", y);
 		printf("[");
 		for ( int x = 0; x < WIDTH; x++) {
 			#if (OUTPUT_ROW_SUBDIVISION > 1)
@@ -180,8 +187,12 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 			printf("),");
 		}
 		printf("]\n");
+		//printf("# end of row %d.\n", y);
 	}
 	printf("# end of print screen.\n");
+	for ( int i = 0; i < 128; i++ ) {
+		printf("# end of print screen, filler text line %d. This filler text prevents the pipe from stalling.\n", i);
+	}
 	return;
 }
 

@@ -4,15 +4,14 @@
 """
     todo:
         -core:
-            -simplify. Make only streaming.
             -replace builtin eval with a custom evaluator that has good error handling and no size limit.
-            -accept any arguments through stdin as well as the usual way.
-            -pypy support.
         -etc:
             -accept pam files as input and as an output format.
             -user-defined kernels:
-            -transform data in transit to another application.
-            -output in multiple resolutions.
+                -transform data in transit to another application.
+                -output in multiple resolutions:
+                    -use threads around pypng image.save.
+                    -use subprocesses.
 """
 
 import sys
@@ -29,19 +28,13 @@ generator = type((i for i in range(1)))
     
 import png
 
+EXIT_CODES = {"success":0, "help":0, "no-args":0, "unknown-keyword-arg":20, "unknown-keyword-arg-operator":21, "unknown-keyword-arg-operation":22, "not-implemented-error": 50}
+
 NOT_IMPLEMENTED_ERRLVL = 255
 
 
 
 
-def measure_time(input_fun):
-    def alt_fun(*args, **kwargs):
-        startTime=time.time()
-        input_fun(*args, **kwargs)
-        endTime=time.time()
-        totalTime = endTime-startTime
-        print("took {} seconds ({} minutes).".format(totalTime, totalTime/60))
-    return alt_fun
 
 
 def gen_take_only(input_gen, count):
@@ -64,7 +57,7 @@ def gen_make_inexhaustible(input_gen):
         assert item is None
         print("warning: this inexhaustible generator had no items to use as templates!")
     while True:
-        #yield copy.deepcopy(item)
+        # yield copy.deepcopy(item)
         yield item
 
 
@@ -81,6 +74,37 @@ def unprepend(string, prefix):
     assert prefix + result == string
     return result
 
+    
+
+
+def preview_long_str(input_str):
+    leftLen = 60
+    rightLen = 60 
+    if len(input_str) < 128:
+        return input_str
+    else:
+        return (input_str[:leftLen] + "...{}chrs...".format(len(input_str)-leftLen-rightLen) + input_str[-rightLen:])
+        
+        
+def monitor_gen(input_gen, nickname):
+    print("{} is being monitored.".format(nickname))
+    for i, item in enumerate(input_gen):
+        print("{} provided item {}: {}.".format(nickname, i, preview_long_str(str(item))))
+        yield item
+        print("{} is being asked for another item.".format(nickname))
+
+
+def measure_time(input_fun):
+    def alt_fun(*args, **kwargs):
+        startTime=time.time()
+        input_fun(*args, **kwargs)
+        endTime=time.time()
+        totalTime = endTime-startTime
+        print("took {} seconds ({} minutes).".format(totalTime, totalTime/60))
+    return alt_fun
+
+    
+    
     
 """
 def split_right(string, delimiter):
@@ -379,16 +403,14 @@ def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     
     
     
-def gen_stdin_lines():
-    def preview_long_str(input_str):
-        if len(input_str) < 128:
-            return input_str
-        else:
-            return (input_str[:60] + "... ..." + input_str[-60:-1])
+        
+        
+    
+def gen_file_lines(source_file=sys.stdin):
         
     for i in itertools.count():
-        print("wait.")
-        nextLine = sys.stdin.readline()
+        print("waiting for line {}.".format(i))
+        nextLine = source_file.readline()
         """
         nextLineChars = []
         while True:
@@ -402,7 +424,7 @@ def gen_stdin_lines():
         if nextLine.startswith("#"):
             print("line {} is {}.".format(i, nextLine[:-1]))
         else:
-            print("line {} is {}.".format(i, preview_long_str(nextLine)))
+            print("line {} is {}.".format(i, preview_long_str(nextLine[:-1])))
         
         # if nextLine.startswith("#"):
         #     continue
@@ -424,7 +446,7 @@ def gen_stdin_lines():
 
         
 class PeekableGenerator:
-    # this shouldn't exist. it should be replaced with itertools.tee.
+    # maybe this shouldn't exist. maybe it should be replaced with itertools.tee.
     def __init__(self, source_gen):
         self.source_gen = source_gen
         self.fridge = collections.deque([])
@@ -453,16 +475,16 @@ class PeekableGenerator:
     def __iter__(self):
         return self
         
-        
 
-    
     
 def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
     assert height > 0, height
     assert filename.endswith(".png"), filename
-    row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
-    row_seq = gen_take_only(row_seq, height) # fix issue where pypng complains about having more rows than it needs and crashes. Kinda weird but I still love you, pypng.
     print("preparing to save file...")
+    row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
+    row_seq = gen_take_only(row_seq, height) # prevent pypng from having too many lines, which is not allowed.
+    # row_seq = monitor_gen(row_seq, "(row_seq for this image)")
+    print("initializing file...")
     image = png.from_array(row_seq, mode=pypng_mode, info={"height":height})
     finalFilename = unappend(filename, ".png") + "_" + str(time.time()) + ".png"
     print("saving file {}...".format(finalFilename))
@@ -490,7 +512,7 @@ def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
 @measure_time
 def run_streaming():
     
-    simpleLineSource = gen_stdin_lines()
+    simpleLineSource = gen_file_lines()
     notelessLineSource = (item for item in simpleLineSource if not item.startswith("#"))
     
     peekableNotelessLineSource = PeekableGenerator(notelessLineSource)
@@ -498,7 +520,7 @@ def run_streaming():
         borrowedLine = peekableNotelessLineSource.peek_at_relative(i)
         if borrowedLine.startswith("ARGUMENT"):
             load_cli_arg(unprepend(borrowedLine, "ARGUMENT "), nonkeyword_args, keyword_args)
-            validate_args(nonkeyword_args, keyword_args)
+            cli_validate_args(nonkeyword_args, keyword_args)
         else:
             assumedHeight = len(eval(borrowedLine)) * keyword_args["row-subdivision"]
             peekableNotelessLineSource.fridge.clear()
@@ -514,6 +536,7 @@ def run_streaming():
         rowAsListGen = (list(item for rowPartItemGen in gen_take_only(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
     else:
         rowAsListGen = (list(rowAsGen) for rowAsGen in partialRowDataGen)
+    # rowAsListGen = monitor_gen(rowAsListGen, "rowAsListGen")
     pypng_streaming_save_squares(filename, rowAsListGen, assumedHeight, pypng_mode=pypngMode)
     
     
@@ -525,6 +548,7 @@ def get_after_match(text_to_match, arg_to_test):
         
 def get_after_keyword_match(name_to_match, arg_to_test, separator="="):
     return get_after_match("--" + name_to_match + separator, arg_to_test)
+
 
 
 
@@ -578,7 +602,7 @@ def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
     
         if arg_str == "--help":
             print(HELP_STRING)
-            exit(0)
+            exit(EXIT_CODES["help"])
             
         for keyword_arg_name in kwargs_to_edit.keys():
             operationStr = get_after_keyword_match(keyword_arg_name, arg_str, separator="")
@@ -595,23 +619,24 @@ def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
             elif operationStr.startswith("."):
                 transformDescStr = unprepend(operationStr, ".")
                 if transformDescStr not in cli_arg_transformer_funs:
-                    raise ValueError("unknown transformation.")
+                    print("unknown keyword argument operation using '.'.")
+                    exit(EXIT_CODES["unknown-keyword-arg-operation"])
                 transformerFun = cli_arg_transformer_funs[transformDescStr]
                 kwargs_to_edit[keyword_arg_name] = transformerFun(kwargs_to_edit[keyword_arg_name])
             else:
-                print("unknown operation {} in argument description {}.".format(operationStr, arg_str))
-                exit(3)
+                print("unknown operator {} in argument description {}.".format(operationStr, arg_str)) # ! fix format later?
+                exit(EXIT_CODES["unknown-keyword-arg-operator"])
                 
             assert kwargs_to_edit[keyword_arg_name] is not None, keyword_arg_name
             return True
             
         print("unknown option: {}".format(arg_str))
-        exit(2)
+        exit(EXIT_CODES["unknown-keyword-arg"])
     else:
         args_to_edit.append(arg_str)
         
         
-def validate_args(args_to_validate, kwargs_to_validate):
+def cli_validate_args(args_to_validate, kwargs_to_validate):
     if kwargs_to_validate["swizzle"] is not None:
         raise NotImplementedError("swizzle")
     
@@ -620,8 +645,29 @@ def validate_args(args_to_validate, kwargs_to_validate):
 
 
 
+def cli_main():
+    if len(prog_args) == 0:
+        print(USAGE_STRING)
+        exit(EXIT_CODES["no-args"])
+        
+    for argStr in prog_args:
+        load_cli_arg(argStr, nonkeyword_args, keyword_args)
+        
+    cli_validate_args(nonkeyword_args, keyword_args)
 
+    if keyword_args["output"] is None or keyword_args["output"] == "":
+        keyword_args["output"] = nonkeyword_args.popleft()
+    
+    cli_validate_args(nonkeyword_args, keyword_args)
 
+    if nonkeyword_args[0] == "-":
+        run_streaming()
+        print("run_streaming is over.")
+    else:
+        raise ValueError("data must be streaming, use '-'.")
+
+    print("exiting python.")
+    exit(EXIT_CODES["success"])
 
 
 
@@ -650,27 +696,11 @@ there are some others but they aren't documented yet."""
 
 
 if len(sys.argv[0]) > 0: # if being run as a command:
-    if len(prog_args) == 0:
-        print(USAGE_STRING)
-        exit(1)
-        
-    for argStr in prog_args:
-        load_cli_arg(argStr, nonkeyword_args, keyword_args)
-        
-    validate_args(nonkeyword_args, keyword_args)
-
-    if keyword_args["output"] is None or keyword_args["output"] == "":
-        keyword_args["output"] = nonkeyword_args.popleft()
-    
-    validate_args(nonkeyword_args, keyword_args)
-
-    if nonkeyword_args[0] == "-":
-        run_streaming()
-        print("run_streaming is over.")
-    else:
-        raise ValueError("data must be streaming, use '-'.")
-
-    print("exiting python.")
-    exit(0)
+    cli_main()
 else:
     print("Not in interactive mode.")
+    
+
+
+
+
