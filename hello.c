@@ -16,7 +16,7 @@
 //#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15; //julia
 
 #define JOINT_BUDDHABROT 0
-static const bool INVERT_BUDDHABROT=true;
+static const bool INVERT_BUDDHABROT=false;
 
 #define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
 
@@ -34,35 +34,36 @@ static const int POINTS_PER_LINE_SEGMENT=4096;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 1024
-#define HEIGHT 1024
-static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+#define WIDTH 32768
+#define HEIGHT 32768
+static const int ITERLIMIT=4096; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=2;
-static const int PRINT_INTERVAL=64;
-#define DO_CLEAR_ON_OUTPUT 1
-#define SWAP_ITER_ORDER 1
+static const int PRINT_INTERVAL=8192;
+#define DO_CLEAR_ON_OUTPUT 0
+#define SWAP_ITER_ORDER 0
 
 static const float seedbias_location_real = 0.0;
-static const float seedbias_location_imag = -2.0;
+static const float seedbias_location_imag = 0.0;
 static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.5;
+static const float seedbias_balance_imag = 0.0;
 
 #define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
 
 
 // ----- c o l o r   s e t t i n g s ----------------------
-#define COLOR_BIT_DEPTH 8
+static const int COLOR_BIT_DEPTH=8;
 #define WRAP_COLORS 0
 #define LOG_COLORS 0
-static const float COLOR_POWER=0.25;
-static const float COLOR_SCALE=16.0;
+static const float COLOR_POWER=1.0;
+static const float COLOR_SCALE=1.0;
 
 #define P4 printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n");
 
 
+// ------ o u t p u t   s e t t i n g s ------------
+#define OUTPUT_ROW_SUBDIVISION 2
 
-
-
+#define P5 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION);
 
 
 
@@ -70,6 +71,7 @@ static const float COLOR_SCALE=16.0;
 #define CHANNEL_COUNT 3
 static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
+
 // ----- unnecessary settings --------------
 #define DEFAULT_PIXEL_BRIGHTNESS 0
 
@@ -151,6 +153,12 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	for ( int y = 0; y < HEIGHT; y++ ) {
 		printf("[");
 		for ( int x = 0; x < WIDTH; x++) {
+			#if (OUTPUT_ROW_SUBDIVISION > 1)
+				if ( x > 0 && x % (WIDTH / OUTPUT_ROW_SUBDIVISION) == 0) {
+					printf("]\n[");
+				}
+			#endif
+		
 			printf("(");
 			for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
 				floatVal = (float) ((*screenArr)[y][x][c]);
@@ -427,7 +435,8 @@ int main(int argc, char **argv) {
 	P2
 	P3
 	P4
-	//printf("\n");
+	P5
+	printf("# done printing args.\n");
 	assert(HEIGHT > 10);
 	assert(WIDTH > 10);
 	assert(to_screen_coord(0.01, 256) > 124);
@@ -436,12 +445,15 @@ int main(int argc, char **argv) {
 	assert(to_screen_coord(from_screen_coord(177, 256), 256) - 177 < 3);
 	//printf("# %f", from_screen_coord(24, 256));
 	assert(to_screen_coord(from_screen_coord(24, 256), 256) - 24 < 8);
+	printf("# done with tests.\n");
+	printf("# initializing globalScreenArr...\n");
 
-	//	static int screenArr[HEIGHT][WIDTH];
 	memset(globalScreenArr, ZERO, sizeof globalScreenArr);
+	printf("# blanking out globalScreenArr....\n");
 	blank_screen(&globalScreenArr);
-	printf("# hello.c ready.\n");
-	//return 0;
+	printf("# ready to start.\n");
+	
+	printf("# drawing test image...\n");
 	draw_test_image(&globalScreenArr);
 	print_screen(&globalScreenArr);
 	blank_screen(&globalScreenArr);

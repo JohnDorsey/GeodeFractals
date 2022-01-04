@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/pypy
 
 
 """
@@ -23,6 +23,7 @@ import math
 import itertools
 import time
 import collections
+import copy
 
 generator = type((i for i in range(1)))
     
@@ -54,11 +55,17 @@ def gen_take_only(input_gen, count):
     
     
 def gen_make_inexhaustible(input_gen):
+    i, item = 0, None
     for item in input_gen:
+        i += 1
         yield item
+    print("warning: drawing from inexhaustible generator!")
+    if i == 0:
+        assert item is None
+        print("warning: this inexhaustible generator had no items to use as templates!")
     while True:
+        #yield copy.deepcopy(item)
         yield item
-        
 
 
 def unappend(string, suffix):
@@ -150,7 +157,7 @@ def higher_range(input_list, iteration_order=None):
     while True:
         yield tuple(counters)
         counters[0] += settings_list[0][2]
-        if counters[0] >= settings_list[0][1]: #change to incorporate signed diffs.
+        if counters[0] >= settings_list[0][1]: # change to incorporate signed diffs.
             counters[0] = settings_list[0][0]
             for rolloverIndex in range(1, len(counters)):
                 counters[rolloverIndex] += settings_list[rolloverIndex][2]
@@ -354,13 +361,13 @@ def format_pypng_mode(channel_count=None, channel_depth=None):
     return channel_count_to_pypng_color_letters(channel_count) + ";" + str(channel_depth)
     
 
-def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
+def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     # assert isinstance(channel_depths, (tuple, list))
     # print("encoding row...")
     
     channelLetters, channelDepth = split_pypng_mode(pypng_mode)
     channelDepths = [channelDepth]*len(channelLetters)
-    return [(item if item is not None else 0) for color in color_seq for item in prepare_color(color, channel_depths=channelDepths)]
+    return ((item if item is not None else 0) for color in color_seq for item in prepare_color(color, channel_depths=channelDepths))
     
 
 
@@ -373,6 +380,12 @@ def encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     
     
 def gen_stdin_lines():
+    def preview_long_str(input_str):
+        if len(input_str) < 128:
+            return input_str
+        else:
+            return (input_str[:60] + "... ..." + input_str[-60:-1])
+        
     for i in itertools.count():
         print("wait.")
         nextLine = sys.stdin.readline()
@@ -386,10 +399,10 @@ def gen_stdin_lines():
             nextLineChars.append(newChar)
         nextLine = "".join(nextLineChars)
         """
-        if nextLine.startswith("#") or len(nextLine) < 128:
+        if nextLine.startswith("#"):
             print("line {} is {}.".format(i, nextLine[:-1]))
         else:
-            print("line {} is {}.".format(i, (nextLine[:60] + "... ..." + nextLine[-60:-1])))
+            print("line {} is {}.".format(i, preview_long_str(nextLine)))
         
         # if nextLine.startswith("#"):
         #     continue
@@ -406,7 +419,7 @@ def gen_stdin_lines():
         #if i == count:
         #    print("line will not be supplied")
         # print("yielding plaintext line.")
-        assert nextLine.endswith("\n")
+        assert nextLine.endswith("\n"), "it actually ends {}.".format(nextLine[-8:])
         yield nextLine[:-1]
 
         
@@ -484,7 +497,7 @@ def run_streaming():
             load_cli_arg(unprepend(borrowedLine, "ARGUMENT "), nonkeyword_args, keyword_args)
             validate_args(nonkeyword_args, keyword_args)
         else:
-            assumedHeight = len(eval(borrowedLine))
+            assumedHeight = len(eval(borrowedLine)) * keyword_args["row-subdivision"]
             peekableNotelessLineSource.fridge.clear()
             peekableNotelessLineSource.fridge.append(borrowedLine)
             break
@@ -493,8 +506,12 @@ def run_streaming():
     filename, channelCount, channelDepth = keyword_args["output"], keyword_args["channel-count"], keyword_args["channel-depth"]
     pypngMode = format_pypng_mode(channel_count=channelCount, channel_depth=channelDepth)
     
-    iterableSource = (encode_pypng_row(eval(line), pypng_mode=pypngMode) for line in peekableNotelessLineSource)
-    pypng_streaming_save_squares(filename, iterableSource, assumedHeight, pypng_mode=pypngMode)
+    partialRowDataGen = (gen_encode_pypng_row(eval(line), pypng_mode=pypngMode) for line in peekableNotelessLineSource)
+    if keyword_args["row-subdivision"] > 1:
+        rowAsListGen = (list(item for rowPartItemGen in gen_take_only(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
+    else:
+        rowAsListGen = (list(rowAsGen) for rowAsGen in partialRowDataGen)
+    pypng_streaming_save_squares(filename, rowAsListGen, assumedHeight, pypng_mode=pypngMode)
     
     
     
@@ -508,31 +525,9 @@ def get_after_keyword_match(name_to_match, arg_to_test, separator="="):
 
 
 
-prog_args = sys.argv[1:]
 
-keyword_arg_descriptions = {
-    "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
-    "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
-}  
-keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8, "output":""} #"untitled{}.png".format(time.time())
-# in the future, it will be possible to use a similar looking definition to specify flatter data.
-# e.g.: 
-#   "yxc" -> [[[y0x0c0, y0x0c1], [y0x1c0, y0x1c1]], [[y1x0c0...]...]].
-#   "y(xc)" -> [[y0x0c0, y0x0c1, y0x1c0, y0x1c1], [y1x0c0...]].
-#   "(yx)c" -> [[y0x0c0, y0x0c1], [y0x1c0, y0x1c1], [y1x0c0...]...]].
-#   "(yxc)" -> [y0x0c0, y0x0c1, y0x1c0, y0x1c1, y1x0c0...].
-#   keep in mind that no new operations are needed to make rows come in unbound groups of three for color channels - this is the same as "(yc)x".
 
-nonkeyword_args = collections.deque([])
 
-USAGE_STRING = "Usage: [OPTION] <FILE> <DATA>"
-HELP_STRING = """
-Create FILE png described by DATA.
-if DATA is '-', all data will be read from stdin. Currently this requires that each line contains one row of pixel info. Lines starting with '#' will be printed, and not parsed.
-
-optional arguments:
---help displays this message.
-there are some others but they aren't documented yet."""
 
 
 def overwrite_matches_left(input_list, index, test_value, new_value):
@@ -587,7 +582,11 @@ def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
             if operationStr is None:
                 continue
             if operationStr.startswith("="):
-                kwargs_to_edit[keyword_arg_name] = unprepend(operationStr, "=")
+                previousValueType = type(kwargs_to_edit[keyword_arg_name])
+                if isinstance(previousValueType, (list, tuple, set, dict)):
+                    raise NotImplementedError("can't fix that type.")
+                conversionMethod = previousValueType # to preserve type of old value when replacing it with new one!
+                kwargs_to_edit[keyword_arg_name] = conversionMethod(unprepend(operationStr, "="))
             elif operationStr.startswith("+="):
                 kwargs_to_edit[keyword_arg_name] += unprepend(operationStr, "+=")
             elif operationStr.startswith("."):
@@ -615,9 +614,37 @@ def validate_args(args_to_validate, kwargs_to_validate):
     
     # assert kwargs_to_validate["output"].endswith(".png")
     assert len(args_to_validate) <= 2
+
+
+
+
+
+
+
+
+prog_args = sys.argv[1:]
+
+keyword_arg_descriptions = {
+    "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
+    "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
+}  
+
+keyword_args = {"output":"", "access-order": "yxc", "swizzle": None, "row-subdivision":1, "channel-count":3, "channel-depth":8} #"untitled{}.png".format(time.time())
+
+nonkeyword_args = collections.deque([])
+
+USAGE_STRING = "Usage: [OPTION] <FILE> <DATA>"
+HELP_STRING = """
+Create FILE png described by DATA.
+if DATA is '-', all data will be read from stdin. Currently this requires that each line contains one row of pixel info. Lines starting with '#' will be printed, and not evaluated.
+
+optional arguments:
+--help displays this message.
+there are some others but they aren't documented yet."""
+
+
         
 
-print(sys.argv[0] + ": now loading args.")
 
 if len(sys.argv[0]) > 0: # if being run as a command:
     if len(prog_args) == 0:
