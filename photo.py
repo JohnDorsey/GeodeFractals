@@ -1,4 +1,4 @@
-#!/usr/bin/pypy
+#!/usr/bin/python3
 
 
 """
@@ -447,6 +447,9 @@ class PeekableGenerator:
         else:
             return next(self.source_gen)
             
+    def next(self): # for python2 support.
+        return self.__next__()
+    
     def __iter__(self):
         return self
         
