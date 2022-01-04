@@ -8,7 +8,7 @@
 // on all builds before 16 nov 2021, color is decided based on drawR and drawI, and the only effect that can be applied after color is decided is iterslide.
 // on probably all builds before 30 dec 2021, the seed point itself is not visited.
 
-#define P0 printf("ARGUMENT --output=helloc\n");
+#define P0 printf("ARGUMENT --output+=helloc\n");
 
 
 // ----- f r a c t a l   s e t t i n g s ---------------------------
@@ -34,18 +34,18 @@ static const int POINTS_PER_LINE_SEGMENT=4096;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 512
-#define HEIGHT 512
+#define WIDTH 1024
+#define HEIGHT 1024
 static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=2;
-static const int PRINT_INTERVAL=512;
+static const int PRINT_INTERVAL=64;
 #define DO_CLEAR_ON_OUTPUT 1
 #define SWAP_ITER_ORDER 1
 
 static const float seedbias_location_real = 0.0;
 static const float seedbias_location_imag = -2.0;
 static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.0;
+static const float seedbias_balance_imag = 0.5;
 
 #define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
 
@@ -57,7 +57,7 @@ static const float seedbias_balance_imag = 0.0;
 static const float COLOR_POWER=0.25;
 static const float COLOR_SCALE=16.0;
 
-#define P4 printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp"));
+#define P4 printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n");
 
 
 
@@ -70,7 +70,8 @@ static const float COLOR_SCALE=16.0;
 #define CHANNEL_COUNT 3
 static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
-
+// ----- unnecessary settings --------------
+#define DEFAULT_PIXEL_BRIGHTNESS 0
 
 
 
@@ -105,15 +106,21 @@ int int_pow(int a, int b) {
 	return result;
 }
 
-void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+
+void fill_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], int fillValue) {
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
 			for (int c = 0; c < CHANNEL_COUNT; c++) {
-				(*screenArr)[y][x][c] = 0;
+				(*screenArr)[y][x][c] = fillValue;
 			}
 		}
 	}
 }
+
+void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+	fill_screen(screenArr, DEFAULT_PIXEL_BRIGHTNESS);
+}
+
 
 void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int risingPixelsDrawn = 0;
@@ -263,9 +270,6 @@ void visit_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float drawR, fl
 		(*screenArr)[drawY][drawX][0] += 1;
 		if ( drawR > cr ) { (*screenArr)[drawY][drawX][1] += 1; }
 		if ( drawI > ci ) {	(*screenArr)[drawY][drawX][2] += 1;	}
-		//printf("draw success:");
-	} else {
-		//printf("draw failure:");
 	}
 }
 
@@ -435,6 +439,7 @@ int main(int argc, char **argv) {
 
 	//	static int screenArr[HEIGHT][WIDTH];
 	memset(globalScreenArr, ZERO, sizeof globalScreenArr);
+	blank_screen(&globalScreenArr);
 	printf("# hello.c ready.\n");
 	//return 0;
 	draw_test_image(&globalScreenArr);

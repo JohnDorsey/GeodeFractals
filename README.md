@@ -30,10 +30,18 @@ notes:
   bugs:
     
     -photo.py sometimes waits to save one image until the next one begins.
+    
+    -the buddhabrot generator seems to not visit the starting point.
 
   future plans:
   
     -improve photo.py.
+    
+      -dissolved axis support. (row.get(x, c)=row.items[x*maxC + c] if c is a dissolved axis).
+      
+      -undoing bit sequence concatenation.
+      
+      -filtering and resizing kernels. intermediate channels.
     
     -add intersection testing, just like in RelentlessFractals.
     

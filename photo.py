@@ -535,29 +535,76 @@ optional arguments:
 there are some others but they aren't documented yet."""
 
 
+def overwrite_matches_left(input_list, index, test_value, new_value):
+    # returns last (leftmost) changed index.
+    changeCount = 0
+    for i in range(index, -1, -1):
+        if input_list[i] == test_value:
+            input_list[i] = new_value
+            changeCount += 1
+        else:
+            if changeCount > 0:
+                return i + 1
+            else:
+                return None
+                
+def trim_floats_in_str(input_str):
+    digits = {str(i) for i in range(10)}
+    charList = [char for char in input_str]
+    digitRunLength = None
+    for i, char in enumerate(charList):
+        if char == ".":
+            digitRunLength = 0
+        elif digitRunLength is not None:
+            if char in digits:
+                digitRunLength += 1
+            else:
+                lastChangedIndex = overwrite_matches_left(charList, i-1, "0", "")
+                if lastChangedIndex is not None:
+                    assert lastChangedIndex > 0
+                    assert charList[lastChangedIndex] == ""
+                    if charList[lastChangedIndex - 1] == ".":
+                        charList[lastChangedIndex] = "0" # undo that change.
+                digitRunLength = None
+    return "".join(charList)
+assert trim_floats_in_str("helloc_abb_z0_1024itr2bisuper_clearonout_swapiterorder_seedbias(0.000000to0.000000and0.000000to-2.000000i)_color(0.250000pow16.000000scale8bitclamp)_512px00002inseq_1641234011.8041685.png") == "helloc_abb_z0_1024itr2bisuper_clearonout_swapiterorder_seedbias(0.0to0.0and0.0to-2.0i)_color(0.25pow16.0scale8bitclamp)_512px00002inseq_1641234011.8041685.png"
+            
+
+cli_arg_transformer_funs = {"trimfloats": trim_floats_in_str}
+
+
 def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
-    argSuccess = False
+    # def fail():
+    
     if arg_str.startswith("--"):
+    
         if arg_str == "--help":
             print(HELP_STRING)
             exit(0)
+            
         for keyword_arg_name in kwargs_to_edit.keys():
-            newValue = get_after_keyword_match(keyword_arg_name, arg_str)
-            if newValue is not None:
-                kwargs_to_edit[keyword_arg_name] = newValue
+            operationStr = get_after_keyword_match(keyword_arg_name, arg_str, separator="")
+            if operationStr is None:
+                continue
+            if operationStr.startswith("="):
+                kwargs_to_edit[keyword_arg_name] = unprepend(operationStr, "=")
+            elif operationStr.startswith("+="):
+                kwargs_to_edit[keyword_arg_name] += unprepend(operationStr, "+=")
+            elif operationStr.startswith("."):
+                transformDescStr = unprepend(operationStr, ".")
+                if transformDescStr not in cli_arg_transformer_funs:
+                    raise ValueError("unknown transformation.")
+                transformerFun = cli_arg_transformer_funs[transformDescStr]
+                kwargs_to_edit[keyword_arg_name] = transformerFun(kwargs_to_edit[keyword_arg_name])
             else:
-                newSuffix = get_after_keyword_match(keyword_arg_name, arg_str, separator="+=")
-                if newSuffix is not None:
-                    kwargs_to_edit[keyword_arg_name] += newSuffix
-                else:
-                    continue
+                print("unknown operation {} in argument description {}.".format(operationStr, arg_str))
+                exit(3)
                 
             assert kwargs_to_edit[keyword_arg_name] is not None, keyword_arg_name
-            argSuccess = True
-            break
-        if argSuccess == False:
-            print("unknown option: {}".format(arg_str))
-            exit(2)
+            return True
+            
+        print("unknown option: {}".format(arg_str))
+        exit(2)
     else:
         args_to_edit.append(arg_str)
         
