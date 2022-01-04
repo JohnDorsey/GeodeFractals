@@ -8,42 +8,19 @@
 // on all builds before 16 nov 2021, color is decided based on drawR and drawI, and the only effect that can be applied after color is decided is iterslide.
 // on probably all builds before 30 dec 2021, the seed point itself is not visited.
 
-
-// ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 512
-#define HEIGHT 512
-static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
-static const int SUPERSAMPLING=8;
-static const int PRINT_INTERVAL=256;
-#define DO_CLEAR_ON_OUTPUT 1
-#define SWAP_ITER_ORDER 1
-
-static const float seedbias_location_real = 0.0;
-static const float seedbias_location_imag = 0.0;
-static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.0;
-
-
-
-// ----- c o l o r   s e t t i n g s ----------------------
-#define LOG_COLORS 0
-#define WRAP_COLORS 0
-static const float COLOR_POWER=0.25;
-static const float COLOR_SCALE=16.0;
-
+#define P0 printf("ARGUMENT --output=helloc\n");
 
 
 // ----- f r a c t a l   s e t t i n g s ---------------------------
-//mandelbrot:
-#define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci;
-//julia:
-//#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15;
-
-#define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
+#define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci; //mandelbrot
+//#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15; //julia
 
 #define JOINT_BUDDHABROT 0
 static const bool INVERT_BUDDHABROT=true;
 
+#define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
+
+#define P1 printf("ARGUMENT --output+=_%s%s\n", (JOINT_BUDDHABROT?"jbb":(INVERT_BUDDHABROT?"abb":"bb")), (Z_STARTS_AT_C?"_zc":"_z0"));
 
 
 // ----- d r a w i n g   s e t t i n g s -------------------------
@@ -52,6 +29,40 @@ static const bool INVERT_BUDDHABROT=true;
 
 #define DO_VISIT_LINE_SEGMENT 0
 static const int POINTS_PER_LINE_SEGMENT=4096;
+
+#define P2 printf("ARGUMENT --output+=%s\n", (DO_MEAN_OF_ZSEQ?"_meanofzseq":"")); if ( DO_VISIT_LINE_SEGMENT ) { printf("ARGUMENT --output+=_%dptsperseg\n", POINTS_PER_LINE_SEGMENT); }
+
+
+// ----- c a n v a s   s e t t i n g s -----------------------
+#define WIDTH 512
+#define HEIGHT 512
+static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+static const int BIDIRECTIONAL_SUPERSAMPLING=2;
+static const int PRINT_INTERVAL=512;
+#define DO_CLEAR_ON_OUTPUT 1
+#define SWAP_ITER_ORDER 1
+
+static const float seedbias_location_real = 0.0;
+static const float seedbias_location_imag = -2.0;
+static const float seedbias_balance_real = 0.0;
+static const float seedbias_balance_imag = 0.0;
+
+#define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
+
+
+// ----- c o l o r   s e t t i n g s ----------------------
+#define COLOR_BIT_DEPTH 8
+#define WRAP_COLORS 0
+#define LOG_COLORS 0
+static const float COLOR_POWER=0.25;
+static const float COLOR_SCALE=16.0;
+
+#define P4 printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp"));
+
+
+
+
+
 
 
 
@@ -85,6 +96,15 @@ int max(int a, int b) {
 	return ((a<b)? b : a);
 }
 
+int int_pow(int a, int b) {
+	assert( b >= 0 );
+	int result = 1;
+	for ( int i = 0; i < b; i++ ) {
+		result *= a;
+	}
+	return result;
+}
+
 void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
@@ -97,7 +117,7 @@ void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
 void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int risingPixelsDrawn = 0;
-	const int bright = 255; const int dim = 0;
+	const int bright = int_pow(2, COLOR_BIT_DEPTH)-1; const int dim = 0;
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
 			if ( y == 0 ) {
@@ -120,6 +140,7 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	printf("# start of print screen.\n");
 	float floatVal;
 	int intVal;
+	int maxVal = int_pow(2, COLOR_BIT_DEPTH);
 	for ( int y = 0; y < HEIGHT; y++ ) {
 		printf("[");
 		for ( int x = 0; x < WIDTH; x++) {
@@ -132,9 +153,9 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 				floatVal = (pow(floatVal, COLOR_POWER) * COLOR_SCALE);
 				intVal = (int) floatVal;
 				#if WRAP_COLORS
-					intVal = intVal % 256;
+					intVal = intVal % maxVal;
 				#endif
-				intVal = max(min(intVal, 255), 0);
+				intVal = max(min(intVal, maxVal-1), 0);
 				if (c < (CHANNEL_COUNT - 1)) {
 					printf("%d,", intVal);
 				} else {
@@ -354,11 +375,11 @@ float lerp(float startVal, float endVal, float balance) {
 	return (endVal*balance)+(startVal*(1.0-balance));
 }
 
-void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
+void build_buddhabrot(int bidirectional_supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
 	printf("# buddhabrot build started.\n");
 	
-	int superHeight = HEIGHT * supersampling; int superWidth = WIDTH * supersampling;
+	int superHeight = HEIGHT * bidirectional_supersampling; int superWidth = WIDTH * bidirectional_supersampling;
 	int iterIA; int iterIB;
 	
 	#if SWAP_ITER_ORDER
@@ -371,7 +392,7 @@ void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL
 	
 	for ( iterIB = 0; iterIB < iterLimB; iterIB++ ) {
 		if ( ((iterIB % PRINT_INTERVAL) == 0) && (iterIB != 0) ) {
-			printf("# %d of %d sample %s processed.\n", iterIB, iterLimB, ((SWAP_ITER_ORDER==1)?"columns":"rows"));
+			printf("# %d of %d sample %s processed.\n", iterIB, iterLimB, (SWAP_ITER_ORDER?"columns":"rows"));
 			print_screen(screenArr);
 			#if DO_CLEAR_ON_OUTPUT
 				blank_screen(screenArr);
@@ -397,6 +418,11 @@ void build_buddhabrot(int supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL
 
 int main(int argc, char **argv) {
 	printf("# hello.c running.\n");
+	P0
+	P1
+	P2
+	P3
+	P4
 	//printf("\n");
 	assert(HEIGHT > 10);
 	assert(WIDTH > 10);
@@ -414,7 +440,8 @@ int main(int argc, char **argv) {
 	draw_test_image(&globalScreenArr);
 	print_screen(&globalScreenArr);
 	blank_screen(&globalScreenArr);
-	build_buddhabrot(SUPERSAMPLING, &globalScreenArr);
+	printf("# done with test image.");
+	build_buddhabrot(BIDIRECTIONAL_SUPERSAMPLING, &globalScreenArr);
 	//do_mandelbrot(SUPERSAMPLING, &globalScreenArr);
 	// return 0;
 	printf("STOP");

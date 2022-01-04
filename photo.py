@@ -70,7 +70,7 @@ def unappend(string, suffix):
     
 def unprepend(string, prefix):
     assert string.startswith(prefix), "unprepend is impossible for these inputs."
-    result = string[len(suffix):]
+    result = string[len(prefix):]
     assert prefix + result == string
     return result
 
@@ -406,7 +406,8 @@ def gen_stdin_lines():
         #if i == count:
         #    print("line will not be supplied")
         # print("yielding plaintext line.")
-        yield nextLine
+        assert nextLine.endswith("\n")
+        yield nextLine[:-1]
 
         
 class PeekableGenerator:
@@ -480,7 +481,7 @@ def run_streaming():
     for i in itertools.count():
         borrowedLine = peekableNotelessLineSource.peek_at_relative(i)
         if borrowedLine.startswith("ARGUMENT"):
-            load_cli_arg(borrowedLine.unappend("ARGUMENT "), nonkeyword_args, keyword_args)
+            load_cli_arg(unprepend(borrowedLine, "ARGUMENT "), nonkeyword_args, keyword_args)
             validate_args(nonkeyword_args, keyword_args)
         else:
             assumedHeight = len(eval(borrowedLine))
@@ -502,8 +503,8 @@ def get_after_match(text_to_match, arg_to_test):
     if arg_to_test.startswith(text_to_match):
         return arg_to_test[len(text_to_match):]
         
-def get_after_keyword_match(name_to_match, arg_to_test):
-    return get_after_match("--" + name_to_match + "=", arg_to_test)
+def get_after_keyword_match(name_to_match, arg_to_test, separator="="):
+    return get_after_match("--" + name_to_match + separator, arg_to_test)
 
 
 
@@ -513,7 +514,7 @@ keyword_arg_descriptions = {
     "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
     "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
 }  
-keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8, "output":"untitled{}.png".format(time.time())}
+keyword_args = {"access-order": "yxc", "swizzle": None, "channel-count":3, "channel-depth":8, "output":""} #"untitled{}.png".format(time.time())
 # in the future, it will be possible to use a similar looking definition to specify flatter data.
 # e.g.: 
 #   "yxc" -> [[[y0x0c0, y0x0c1], [y0x1c0, y0x1c1]], [[y1x0c0...]...]].
@@ -542,14 +543,18 @@ def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
             exit(0)
         for keyword_arg_name in kwargs_to_edit.keys():
             newValue = get_after_keyword_match(keyword_arg_name, arg_str)
-            if newValue is None:
-                continue
-            else:
+            if newValue is not None:
                 kwargs_to_edit[keyword_arg_name] = newValue
-                assert kwargs_to_edit[keyword_arg_name] is not None, keyword_arg_name
-
-                argSuccess = True
-                break
+            else:
+                newSuffix = get_after_keyword_match(keyword_arg_name, arg_str, separator="+=")
+                if newSuffix is not None:
+                    kwargs_to_edit[keyword_arg_name] += newSuffix
+                else:
+                    continue
+                
+            assert kwargs_to_edit[keyword_arg_name] is not None, keyword_arg_name
+            argSuccess = True
+            break
         if argSuccess == False:
             print("unknown option: {}".format(arg_str))
             exit(2)
@@ -561,7 +566,7 @@ def validate_args(args_to_validate, kwargs_to_validate):
     if kwargs_to_validate["swizzle"] is not None:
         raise NotImplementedError("swizzle")
     
-    assert kwargs_to_validate["output"].endswith(".png")
+    # assert kwargs_to_validate["output"].endswith(".png")
     assert len(args_to_validate) <= 2
         
 
@@ -574,10 +579,11 @@ if len(sys.argv[0]) > 0: # if being run as a command:
         
     for argStr in prog_args:
         load_cli_arg(argStr, nonkeyword_args, keyword_args)
-            
+        
     validate_args(nonkeyword_args, keyword_args)
 
-    keyword_args["output"] = nonkeyword_args.popleft()
+    if keyword_args["output"] is None or keyword_args["output"] == "":
+        keyword_args["output"] = nonkeyword_args.popleft()
     
     validate_args(nonkeyword_args, keyword_args)
 
