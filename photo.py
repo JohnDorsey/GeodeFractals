@@ -28,13 +28,16 @@ generator = type((i for i in range(1)))
     
 import png
 
-EXIT_CODES = {"success":0, "help":0, "no-args":0, "unknown-keyword-arg":20, "unknown-keyword-arg-operator":21, "unknown-keyword-arg-operation":22, "not-implemented-error": 50}
-
-NOT_IMPLEMENTED_ERRLVL = 255
+EXIT_CODES = {"success":0, "help":0, "no-args":0, "unknown-keyword-arg":20, "unknown-keyword-arg-operator":21, "unknown-keyword-arg-operation":22, "not-implemented-error": 50, "crash":51}
 
 
 
+def assert_equal(thing0, thing1):
+    assert thing0 == thing1, "{} does not equal {}.".format(thing0, thing1)
 
+def assure_less_than(thing0, thing1):
+    assert thing0 < thing1, "{} is not less than {}.".format(thing0, thing1)
+    return thing0
 
 
 def gen_take_only(input_gen, count):
@@ -45,6 +48,27 @@ def gen_take_only(input_gen, count):
             return
         yield currentItem
     return
+    
+
+
+def preview_long_str(input_str):
+    leftLen = 60
+    rightLen = 60 
+    if len(input_str) < 128:
+        return input_str
+    else:
+        return (input_str[:leftLen] + "...{}chrs...".format(len(input_str)-leftLen-rightLen) + input_str[-rightLen:])
+        
+    
+    
+def assure_length_is(input_container, length):
+    assert len(input_container) == length, "the input container {} is {} items long, not the required {}.".format(preview_long_str(str(input_container)), len(input_container), length)
+    return input_container
+    
+def assure_type_is(input_object, type_):
+    assert type(input_object) == type_, type(input_object)
+    return input_object
+
     
     
 def gen_make_inexhaustible(input_gen):
@@ -77,14 +101,6 @@ def unprepend(string, prefix):
     
 
 
-def preview_long_str(input_str):
-    leftLen = 60
-    rightLen = 60 
-    if len(input_str) < 128:
-        return input_str
-    else:
-        return (input_str[:leftLen] + "...{}chrs...".format(len(input_str)-leftLen-rightLen) + input_str[-rightLen:])
-        
         
 def monitor_gen(input_gen, nickname):
     print("{} is being monitored.".format(nickname))
@@ -155,6 +171,75 @@ def labled_shape(data_to_test, access_order):
     return result
 
 
+def trisign(value):
+    """
+    if value < 0:
+        return -1
+    elif value > 0:
+        return 1
+    else:
+        assert value == 0
+        return 0
+    """
+    return compare(0, value)
+        
+def compare(a, b):
+    if a < b:
+        return 1
+    elif a > b:
+        return -1
+    else:
+        assert a == b
+        return 0
+
+
+def number_trisign_weakly_describes_order(a, b, number_to_compare):
+    return trisign_weakly_describes_order(a, b, trisign(number_to_compare))
+
+def trisign_weakly_describes_order(a, b, sign_to_compare):
+    """
+    if a == b:
+        return True
+    if sign_to_compare == 1:
+        return a < b
+    elif sign_to_compare == -1:
+        return a > b
+    elif sign_to_compare == 0:
+        return a
+    """
+    assert sign_to_compare in {-1, 0, 1}
+    comparison = compare(a, b)
+    if comparison == 0:
+        return True
+    elif sign_to_compare == 0:
+        return False
+    return sign_to_compare == comparison
+    
+assert all(trisign_weakly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,1),(5,5,0),(5,5,-1),(5,4,-1)])
+assert all((not trisign_weakly_describes_order(*testVals)) for testVals in [(5,6,0),(5,6,-1),(5,4,1),(5,4,0)])
+
+
+def number_trisign_strongly_describes_order(a, b, number_to_compare):
+    return trisign_strongly_describes_order(a, b, trisign(number_to_compare))
+
+def trisign_strongly_describes_order(a, b, sign_to_compare):
+    """
+    if sign_to_compare == 1:
+        return a < b
+    elif sign_to_compare == 0:
+        return a == b
+    elif sign_to_compare == -1:
+        return a > b
+    else:
+        raise ValueError("sign.")
+    """
+    assert sign_to_compare in {-1, 0, 1}
+    return sign_to_compare == compare(a, b)
+
+assert all(trisign_strongly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,0),(5,4,-1)])
+assert all((not trisign_strongly_describes_order(*testVals)) for testVals in [(5,5,1),(5,5,-1), (5,6,0),(5,6,-1), (5,4,1),(5,4,0)])
+
+
 def higher_range(input_list, iteration_order=None):
     if iteration_order is not None:
         newInputList = [None for i in range(len(input_list))]
@@ -163,6 +248,8 @@ def higher_range(input_list, iteration_order=None):
         for item in higher_range(newInputList, iteration_order=None):
             yield tuple(item[iteration_order[i]] for i in range(len(iteration_order)))
     settings_list = [None for i in range(len(input_list))]
+    
+    # validate and expand settings:
     for i, item in enumerate(input_list):
         newItem = None
         if type(item) == int:
@@ -174,26 +261,31 @@ def higher_range(input_list, iteration_order=None):
                 newItem = item
             else:
                 raise ValueError("wrong tuple length.")
+        assert newItem[2] != 0
         if newItem[2] < 0:
             raise NotImplementedError("this method can't test for range ends when moving backwards yet.")
         settings_list[i] = newItem
+    assert None not in settings_list
+        
     counters = [settings_list[i][0] for i in range(len(input_list))]
     while True:
         yield tuple(counters)
         counters[0] += settings_list[0][2]
-        if counters[0] >= settings_list[0][1]: # change to incorporate signed diffs.
+        #if (counters[0] >= settings_list[0][1]): # change to incorporate signed diffs.
+        if number_trisign_weakly_describes_order(settings_list[0][1], counters[0], settings_list[0][2]):
             counters[0] = settings_list[0][0]
             for rolloverIndex in range(1, len(counters)):
                 counters[rolloverIndex] += settings_list[rolloverIndex][2]
-                if counters[rolloverIndex] >= settings_list[rolloverIndex][1]:
+                if number_trisign_weakly_describes_order(settings_list[rolloverIndex][1], counters[rolloverIndex], settings_list[rolloverIndex][2]):
                     counters[rolloverIndex] = settings_list[rolloverIndex][0]
                     continue
                 else:
                     break # no more rollovers should happen.
             else:
                 return
+    assert False
 
-assert [item for item in higher_range([(5,8), (1,4)])] == [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)]
+assert_equal([item for item in higher_range([(5,8), (1,4)])], [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
 
 
 def shared_items_are_consecutive(input_list, input_set, require_immediate_start=False):
@@ -209,17 +301,159 @@ def shared_items_are_consecutive(input_list, input_set, require_immediate_start=
         # zero matches in this loop means a match run length of one, where the one match was encountered in the first loop.
         if item not in input_set:
             break
-    for item in inputItemGen:
+    for item in inputItemGen: # make sure there are no _more_ matches.
         if item in input_set:
             return False
     return True
             
+assert shared_items_are_consecutive("abcdefg", {"b","c","d"}) == True
+assert shared_items_are_consecutive("abcdefg", {"b","c","d"}, require_immediate_start=True) == False
+assert shared_items_are_consecutive("bcdefg", {"b","c","d"}, require_immediate_start=True) == True
+
+"""
+def get_shared_value(input_data):
+    inputItemGen = iter(input_data)
+    sharedValue = next(inputItemGen)
+    for item in inputItemGen:
+        assert item is not None, "can't be None."
+        if item != sharedValue:
+            return None
+    return sharedValue
+
+"""
+"""
+def gen_assuredly_same_group(input_data, key_fun):
+    inputItemGen = iter(input_data)
+    firstItem = next(inputItemGen)
+    sharedGroupID = key_fun(firstItem)
+    yield (sharedGroupID, firstItem)
+    ...
+"""
+
+def gen_assuredly_in_group(input_data, key_fun, key):
+    for item in input_data:
+        assert key_fun(item) == key, "item {} in group {} is not in group {}.".format(item, key_fun(item), key)
+        yield item
+    
+def flatten_and_assure_axial_uniform_depth(input_data):
+    inputItemGen = iter(input_data)
+    firstItem = next(inputItemGen)
+    isEnterable = hasattr(firstItem, "__iter__")
+    validatedItemGen = itertools.chain([firstItem], gen_assuredly_in_group(inputItemGen, (lambda testItem: hasattr(testItem, "__iter__")), isEnterable))
+    if isEnterable:
+        for item in validatedItemGen:
+            for subItem in flatten_and_assure_axial_uniform_depth(item):
+                yield subItem
+    else:
+        for item in validatedItemGen:
+            yield item
+        
+    """
+    if isEnterable:
+        for item in inputItemGen:
+            for subItem in flatten_uniform(item):
+                yield subItem
+    else:
+        for item in inputItemGen:
+            assert not hasattr(item, "__iter__")
+            ...
+    yield firstItem
+    """
+    
+
+def flatten(input_data):
+    for item in input_data:
+        if hasattr(item, "__iter__"):
+            yield flatten(item)
+        else:
+            yield item
 
 
-def get_at_advanced(data_to_access, labeled_coords, access_order, bitcatted_axes={}, digested_axes={}, labeled_axis_sizes=None):
+def encode_flat_bitcat(input_data, item_bit_depth):
+    result = 0
+    itemValueRange = 2**item_bit_depth
+    for item in input_data:
+        assert isinstance(item, int), type(item)
+        assert 0 <= item < itemValueRange, (item, itemValueRange)
+        result *= itemValueRange
+        result += item
+    return result
+    
+assert_equal(encode_flat_bitcat([7, 6, 5, 4, 3, 2, 1, 0, 1, 2], 3), int("111_110_101_100_011_010_001_000_001_010", 2))
+assert_equal(encode_flat_bitcat([6,7]*10, 3), int("110111"*10, 2))
+
+
+
+def encode_deep_bitcat(input_data, leaf_bit_depth):
+    itemGen = gen_assuredly_in_group(flatten_and_assure_axial_uniform_depth(input_data), (lambda testItem: isinstance(testItem, int)), True)
+    return encode_flat_bitcat(itemGen, leaf_bit_depth)
+    
+assert_equal(encode_deep_bitcat([(7, 6), [(5, 4), (3, 2)], (1, 0), (1, 2)], 3), int("111_110_101_100_011_010_001_000_001_010", 2))
+
+
+
+
+def decode_flat_bitcat(input_data, item_bit_depth, count=None):
+    result = []
+    itemValueRange = 2**item_bit_depth
+    while input_data > 0:
+        result.append(input_data % itemValueRange)
+        input_data //= itemValueRange
+    if count is not None:
+        while len(result) < count:
+            result.append(0)
+    for item in result:
+        assert item.bit_length() <= item_bit_depth, (item, result, input_data)
+    return result[::-1]
+
+testArr = [(i**3)%16 for i in range(64)]
+assert_equal(decode_flat_bitcat(encode_flat_bitcat(testArr, 16), 16, count=len(testArr)), testArr)
+del testArr
+
+
+def gen_accumulate_product(input_seq):
+    return itertools.accumulate(input_seq, lambda a, b: a*b)
+
+
+
+def get_in_uniform_flat_bitcat(input_data, item_bit_length=None, significance_index=None):
+    assert item_bit_length >= 1
+    assert significance_index is not None
+    # if item_count is not None and item_bit_length is not None:
+    #     assert input_data.bit_length() < item_count*item_bit_length
+    # mask = (2**item_bit_length - 1) * (2**(item_bit_length*significance_index))
+    mask = 2**(item_bit_length*(significance_index+1)) - 1
+    result = (input_data & mask) // (2**(item_bit_length*significance_index))
+    return result
+    
+testArr = [0,0,1,16,64,192,255,254,128,127,126]
+testNum = encode_flat_bitcat(testArr, 8)
+assert_equal([get_in_uniform_flat_bitcat(testNum, item_bit_length=8, significance_index=len(testArr)-i-1) for i in range(len(testArr))], testArr)
+del testArr, testNum
+
+
+def get_in_uniform_deep_bitcat(input_data, labeled_coords, access_order, labeled_axis_sizes, leaf_bit_length):
+    flatIndexRange = product(labeled_axis_sizes[axisLabel] for axisLabel in access_order)
+    # axisLabelAndScopeSizeGen = itertools.accumulate(((axisLabel, labeled_axis_sizes[axisLabel]) for axisLabel in access_order[::-1]), lambda workingPair,)...
+    axisSizeGen = (labeled_axis_sizes[axisLabel] for axisLabel in access_order[::-1])
+    axisLabelAndWorthGen = zip(access_order[::-1], gen_accumulate_product(itertools.chain([1], axisSizeGen)))
+    flatIndex = sum(labeled_coords[axisLabel]*axisWorth for axisLabel, axisWorth in axisLabelAndWorthGen)
+    flatSignificanceIndex = flatIndexRange - flatIndex - 1
+    return get_in_uniform_flat_bitcat(input_data, item_bit_length=leaf_bit_length, significance_index=flatSignificanceIndex)
+    
+testArr = [[0,0,1], [16,64,192], [255,254,128], [127,126,1]]
+testNum = encode_deep_bitcat(testArr, 8)
+assert_equal([[get_in_uniform_deep_bitcat(testNum, {"x":x, "y":y}, "yx", {"y":4, "x":3}, leaf_bit_length=8) for x in range(3)] for y in range(4)], testArr)
+del testArr, testNum
+    
+
+def get_at_advanced(input_data, labeled_coords, access_order, bitcatted_axes={}, digested_axes={}, labeled_axis_sizes=None):
     if len(bitcatted_axes) > 0:
-        assert shared_items_are_consecutive(access_order[::-1], bitcatted_axes), "bitcatted_axes much not have any gaps when compared to access order."
-        raise NotImplementedError("can't do bitcatting yet.")
+        assert shared_items_are_consecutive(access_order[::-1], bitcatted_axes, require_immediate_start=True), "bitcatted_axes much not have any gaps when compared to access order."
+        assert labeled_axis_sizes is not None, "axis sizes must be provided to undo bit concatenation."
+        assert all(label in labeled_axis_sizes for label in bitcatted_axes), "not enough info."
+        bitcatInt = get_at_advanced(input_data, labeled_coords, access_order[:-len(bitcatted_axes)], digested_axes=digested_axes, labeled_axis_sizes=labeled_axis_sizes)
+        raise NotImplementedError("not finished.")
     if len(digested_axes) > 0:
         for digestedAxis in digested_axes:
             assert digestedAxis not in bitcatted_axes, "a bitcatted axis is stored as an integer, and can't be digested - bitcatting more than one axis is only possible by bitcatting both an axis and its parent axis."
@@ -227,13 +461,13 @@ def get_at_advanced(data_to_access, labeled_coords, access_order, bitcatted_axes
     raise NotImplementedError()
             
 
-def get_at(data_to_access, labeled_coords, access_order):
+def get_at(input_data, labeled_coords, access_order):
     if len(access_order) == 0:
         # return now because there is probably no more accessing (narrowing) to be done. This silently allows coords with nonsense components, though.
-        return data_to_access
-    if not hasattr(data_to_access, "__len__"):
+        return input_data
+    if not hasattr(input_data, "__len__"):
         raise IndexError("the data can't be browsed here.")
-    if len(data_to_access) == 0:
+    if len(input_data) == 0:
         raise IndexError("the data is empty here.")
         # return None
         
@@ -243,14 +477,14 @@ def get_at(data_to_access, labeled_coords, access_order):
         ac = None
     
     if isinstance(ac, int):
-        return get_at(data_to_access[ac], labeled_coords, access_order[1:])
+        return get_at(input_data[ac], labeled_coords, access_order[1:])
     elif ac is None:
         ac = slice(None, None, None)
     else:
         assert isinstance(ac, slice), "invalid access coordinate provided."
     
     # this is where a change from an input access order to a different output access order might be made. Any coordinate components not specified in labled_coords could be swapped to change the orientation of the data. This would involve making the recursive calls to get_at include a new element in labeled_coords. let this added element be the index used in iteration.
-    return [get_at(data_to_access_sub, labeled_coords, access_order[1:]) for data_to_access_sub in itertools.islice(data_to_access, ac.start, ac.stop, ac.step)]
+    return [get_at(input_data_sub, labeled_coords, access_order[1:]) for input_data_sub in itertools.islice(input_data, ac.start, ac.stop, ac.step)]
 
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2, "y":1}, "yx") == 6
 assert get_at([[1,2,3],[4,5,6],[7,8,9]], {"x":2}, "yx") == [3,6,9]
@@ -313,28 +547,28 @@ def get_formatted(input_data, labeled_coords, input_access_order, output_access_
 
 
 
-def prepare_color(color_input, channel_depths=None):
-    assert isinstance(channel_depths, (tuple, list))
+def prepare_color(color_input, channel_max_values=None):
+    assert isinstance(channel_max_values, (tuple, list))
     
-    if isinstance(color_input, int):
-        return prepare_color([color_input], channel_depths)  
-    elif isinstance(color_input, (tuple, list)):
-        if len(color_input) == len(channel_depths):
-            workingColor = color_input
-        elif len(color_input) < len(channel_depths):
-            workingColor = (color_input + type(color_input)([0]*len(channel_depths)))[:len(channel_depths)]
-        else:
-            raise ValueError("the color is too long.")
-    else:
-        raise TypeError("bad color type: {}.".format(type(color_input)))
-        
+    workingColor = color_input
+    
+    if isinstance(workingColor, int):
+        workingColor = [workingColor]
+    assert isinstance(workingColor, (list, tuple))
+    assert len(workingColor) <= len(channel_max_values)
+    
+    if len(workingColor) < len(channel_max_values):
+        workingColor = workingColor + type(workingColor)([0]*(len(channel_max_values) - len(workingColor)))
+    assert len(workingColor) == len(channel_max_values)
+    
     for componentIndex, component in enumerate(workingColor):
         assert component >= 0
-        assert component < 2**channel_depths[componentIndex]
+        assert component <= channel_max_values[componentIndex], "at index {} in the color {} made from the input {}, the value {} is not less than the maximum {} in {}.".format(componentIndex, workingColor, color_input, component, channel_max_values[componentIndex], channel_max_values)
         
     return workingColor
 
-
+assert_equal(tuple(prepare_color((255, 0, 0), channel_max_values=(255, 255, 255, 255))), (255, 0, 0, 0))
+assert_equal(tuple(prepare_color(255, channel_max_values=(255, 255, 255, 255))), (255, 0, 0, 0))
 
 
 
@@ -390,9 +624,11 @@ def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     # print("encoding row...")
     
     channelLetters, channelDepth = split_pypng_mode(pypng_mode)
-    channelDepths = [channelDepth]*len(channelLetters)
-    return ((item if item is not None else 0) for color in color_seq for item in prepare_color(color, channel_depths=channelDepths))
-    
+    channelCount = len(channelLetters)
+    assert channelCount == 3, "not implemented."
+    channelMaxValues = [(2**channelDepth)-1]*channelCount
+    result = ((item if item is not None else 0) for color in color_seq for item in assure_length_is(list(prepare_color(color, channel_max_values=channelMaxValues)), channelCount))
+    return result
 
 
         
@@ -485,8 +721,10 @@ def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
     row_seq = gen_take_only(row_seq, height) # prevent pypng from having too many lines, which is not allowed.
     # row_seq = monitor_gen(row_seq, "(row_seq for this image)")
     print("initializing file...")
-    image = png.from_array(row_seq, mode=pypng_mode, info={"height":height})
+    image = png.from_array(row_seq, mode=pypng_mode, info={"width":height, "height":height})
     finalFilename = unappend(filename, ".png") + "_" + str(time.time()) + ".png"
+    print("finished initializing file.")
+    # return image
     print("saving file {}...".format(finalFilename))
     image.save(finalFilename)
     print("finished saving file {}.".format(finalFilename))
@@ -495,17 +733,33 @@ def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
 def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
     assert height > 0, height
     assert filename.endswith(".png"), filename
+    
     peekableRowSeq = PeekableGenerator(row_seq)
+    
     for i in itertools.count():
         try:
             print("peeking at row seq...")
-            peekableRowSeq.peek_at_relative(0) # may raise StopIteration.
+            peekedRow = peekableRowSeq.peek_at_relative(0) # may raise StopIteration.
+            assert isinstance(peekedRow, list)
             print("done peeking.")
-            pypng_streaming_save_square(unappend(filename, ".png")+"_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
+            try:
+                pypng_streaming_save_square(unappend(filename, ".png") + "_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
+            except TypeError as e:
+                sys.stderr.write("Exception while saving: {}.\n".format(e))
+                sys.stderr.write("The most recently peeked row looked like {} and had {} items.\n".format(preview_long_str(str(peekedRow)), len(peekedRow)))
+                exit(EXIT_CODES["crash"])
         except StopIteration:
             return
     assert False
     
+"""
+if isinstance(row_seq, PeekableGenerator):
+    if not disable_peek_warning:
+        print("pypng_streaming_save_squares: warning: A peekable generator has been provided and will be used directly. This might access more items from the source sequence than necessary.")
+    peekableRowSeq = row_seq
+else:
+    peekableRowSeq = PeekableGenerator(row_seq)
+"""
     
     
     
@@ -522,21 +776,48 @@ def run_streaming():
             load_cli_arg(unprepend(borrowedLine, "ARGUMENT "), nonkeyword_args, keyword_args)
             cli_validate_args(nonkeyword_args, keyword_args)
         else:
-            assumedHeight = len(eval(borrowedLine)) * keyword_args["row-subdivision"]
+            peekedWidth = len(eval(borrowedLine)) * keyword_args["row-subdivision"]
             peekableNotelessLineSource.fridge.clear()
             peekableNotelessLineSource.fridge.append(borrowedLine)
             break
-    print("length is {}.".format(assumedHeight))
+    print("peekedWidth is {}.".format(peekedWidth))
+    
+    print("encoding will soon start. The settings are: {}.".format(keyword_args))
     
     filename, channelCount, channelDepth = keyword_args["output"], keyword_args["channel-count"], keyword_args["channel-depth"]
     pypngMode = format_pypng_mode(channel_count=channelCount, channel_depth=channelDepth)
     
-    partialRowDataGen = (gen_encode_pypng_row(eval(line), pypng_mode=pypngMode) for line in peekableNotelessLineSource)
+    partialRowDataGen = (eval(line) for line in peekableNotelessLineSource)
     if keyword_args["row-subdivision"] > 1:
         rowAsListGen = (list(item for rowPartItemGen in gen_take_only(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
     else:
         rowAsListGen = (list(rowAsGen) for rowAsGen in partialRowDataGen)
-    # rowAsListGen = monitor_gen(rowAsListGen, "rowAsListGen")
+    
+    if len(keyword_args["bitcatted-axes"]) > 0:
+        if keyword_args["access-order"] != "yxc":
+            raise NotImplementedError()
+        if len(keyword_args["bitcatted-axes"]) > 1:
+            raise NotImplementedError()
+        assert keyword_args["bitcatted-axes"] == {"c"}, keyword_args
+        # rowAsBitcatListGen = rowAsListGen
+        def undoChannelBitcat(bitcatNum):
+            result = tuple(assure_less_than(component, 2**channelDepth) for component in decode_flat_bitcat(bitcatNum, channelDepth, count=channelCount))
+            assert len(result) == channelCount
+            assert max(result) < 256
+            return result
+        def processRow(row):
+            result = [undoChannelBitcat(bitcatNum) for bitcatNum in assure_length_is(row, peekedWidth)]
+            assert len(result) == peekedWidth
+            return result
+    else:
+        def processRow(row):
+            return row
+            
+    # assert peekedWidth*channelCount == 1536, "!"
+    rowAsListGen = (assure_length_is(list(assure_type_is(item, int) for item in gen_encode_pypng_row(processRow(row), pypng_mode=pypngMode)), peekedWidth*channelCount) for row in rowAsListGen)
+        
+        
+    assumedHeight = peekedWidth
     pypng_streaming_save_squares(filename, rowAsListGen, assumedHeight, pypng_mode=pypngMode)
     
     
@@ -609,11 +890,21 @@ def load_cli_arg(arg_str, args_to_edit, kwargs_to_edit):
             if operationStr is None:
                 continue
             if operationStr.startswith("="):
-                previousValueType = type(kwargs_to_edit[keyword_arg_name])
-                if isinstance(previousValueType, (list, tuple, set, dict)):
-                    raise NotImplementedError("can't fix that type.")
-                conversionMethod = previousValueType # to preserve type of old value when replacing it with new one!
-                kwargs_to_edit[keyword_arg_name] = conversionMethod(unprepend(operationStr, "="))
+                previousValue = kwargs_to_edit[keyword_arg_name]
+                previousValueType = type(previousValue)
+                newValueString = unprepend(operationStr, "=")
+                if previousValueType in {str, int}:
+                    kwargs_to_edit[keyword_arg_name] = previousValueType(newValueString)
+                elif previousValueType in {list, tuple, set}:
+                    for item in previousValue:
+                        if type(item) != str:
+                            raise NotImplementedError("can't regenerate any item type but str.")
+                    newValueAsList = [item for item in newValueString.split(",") if item != ""]
+                    kwargs_to_edit[keyword_arg_name] = previousValueType(newValueAsList)
+                elif previousValueType in {dict}:
+                    raise NotImplementedError("can't modify arg of that type.")
+                else:
+                    raise NotImplementedError("cant' modify arg of unrecognized type.")
             elif operationStr.startswith("+="):
                 kwargs_to_edit[keyword_arg_name] += unprepend(operationStr, "+=")
             elif operationStr.startswith("."):
@@ -644,7 +935,6 @@ def cli_validate_args(args_to_validate, kwargs_to_validate):
     assert len(args_to_validate) <= 2
 
 
-
 def cli_main():
     if len(prog_args) == 0:
         print(USAGE_STRING)
@@ -655,12 +945,15 @@ def cli_main():
         
     cli_validate_args(nonkeyword_args, keyword_args)
 
-    if keyword_args["output"] is None or keyword_args["output"] == "":
+    if keyword_args["output"] in {None, ""}:
         keyword_args["output"] = nonkeyword_args.popleft()
+    if keyword_args["input"] in {None, ""}:
+        keyword_args["input"] = nonkeyword_args.popleft()
     
     cli_validate_args(nonkeyword_args, keyword_args)
 
-    if nonkeyword_args[0] == "-":
+    if keyword_args["input"] == "-":
+        print("will run in streaming mode. settings: {}, {}.".format(nonkeyword_args, keyword_args))
         run_streaming()
         print("run_streaming is over.")
     else:
@@ -678,7 +971,7 @@ keyword_arg_descriptions = {
     "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
 }  
 
-keyword_args = {"output":"", "access-order": "yxc", "swizzle": None, "row-subdivision":1, "channel-count":3, "channel-depth":8} #"untitled{}.png".format(time.time())
+keyword_args = {"input":"", "output":"", "access-order": "yxc", "bitcatted-axes":set(), "swizzle": None, "row-subdivision":1, "channel-count":3, "channel-depth":8} #"untitled{}.png".format(time.time())
 
 nonkeyword_args = collections.deque([])
 

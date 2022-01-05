@@ -15,7 +15,7 @@
 #define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci; //mandelbrot
 //#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15; //julia
 
-#define JOINT_BUDDHABROT 0
+#define JOINT_BUDDHABROT 1
 static const bool INVERT_BUDDHABROT=false;
 
 #define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
@@ -34,18 +34,18 @@ static const int POINTS_PER_LINE_SEGMENT=4096;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 4096
-#define HEIGHT 4096
+#define WIDTH 8192
+#define HEIGHT 8192
 static const int ITERLIMIT=1048576; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
-static const int BIDIRECTIONAL_SUPERSAMPLING=4;
-static const int PRINT_INTERVAL=128;
+static const int BIDIRECTIONAL_SUPERSAMPLING=1;
+static const int PRINT_INTERVAL=256;
 #define DO_CLEAR_ON_OUTPUT 1
-#define SWAP_ITER_ORDER 1
+#define SWAP_ITER_ORDER 0
 
 static const float seedbias_location_real = 0.0;
-static const float seedbias_location_imag = -2.0;
+static const float seedbias_location_imag = 0.0;
 static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.5;
+static const float seedbias_balance_imag = 0.0;
 
 #define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
 
@@ -53,17 +53,20 @@ static const float seedbias_balance_imag = 0.5;
 // ----- c o l o r   s e t t i n g s ----------------------
 static const int COLOR_BIT_DEPTH=8;
 #define WRAP_COLORS 0
-#define LOG_COLORS 0
-static const float COLOR_POWER=0.8;
+#define LOG_COLORS 1
+static const float COLOR_POWER=2.0;
 static const float COLOR_SCALE=1.0;
 
-#define P4 assert(COLOR_SCALE > 0.001); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n");
+static int COLOR_MAX_VALUE;
+#define P4 printf("ARGUMENT --channel-depth=%d\n", COLOR_BIT_DEPTH);
+#define P5 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n"); // file name and assertions.
 
 
 // ------ o u t p u t   s e t t i n g s ------------
-#define OUTPUT_ROW_SUBDIVISION 1
+#define OUTPUT_ROW_SUBDIVISION 1 // the number of subdivision sections (1 for whole (unsubdivided) rows).
+#define BITCAT_THE_CHANNEL_AXIS 1
 
-#define P5 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION);
+#define P6 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION); printf("ARGUMENT --bitcatted-axes=%s\n", (BITCAT_THE_CHANNEL_AXIS?"c":""));
 
 
 
@@ -71,7 +74,7 @@ static const float COLOR_SCALE=1.0;
 #define CHANNEL_COUNT 3
 static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
-#define BUFFER_SIZE 256
+// #define BUFFER_SIZE 256
 
 // ----- unnecessary settings --------------
 #define DEFAULT_PIXEL_BRIGHTNESS 0
@@ -132,7 +135,9 @@ void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
 void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int risingPixelsDrawn = 0;
-	const int bright = int_pow(2, COLOR_BIT_DEPTH)-1; const int dim = 0;
+	// const int bright = int_pow(2, (int)(((float)COLOR_BIT_DEPTH) / COLOR_POWER))-1;
+	const int bright = 2147483646;
+	const int dim = 0;
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
 			if ( y == 0 ) {
@@ -149,13 +154,55 @@ void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 			}
 		}
 	}
+	(*screenArr)[1][1][0] = bright; (*screenArr)[1][1][1] = dim; (*screenArr)[1][1][2] = dim;
+	(*screenArr)[1][2][0] = dim; (*screenArr)[1][2][1] = bright; (*screenArr)[1][2][2] = dim;
+	(*screenArr)[1][3][0] = dim; (*screenArr)[1][3][1] = dim; (*screenArr)[1][3][2] = bright;
 }
+
+
+int process_color_component(int inputValue) {
+	
+	float floatVal = (float) inputValue;
+	
+	#if LOG_COLORS
+		floatVal = logf(floatVal + 1.0);
+	#endif
+	
+	floatVal = (pow(floatVal, COLOR_POWER) * COLOR_SCALE);
+	
+	int intVal = (int) floatVal;
+	
+	#if WRAP_COLORS
+		intVal = intVal % COLOR_MAX_VALUE;
+	#endif
+	
+	intVal = max(min(intVal, COLOR_MAX_VALUE-1), 0);
+	return intVal;
+}
+
+
+void print_color(int (*color)[CHANNEL_COUNT]) {
+	
+	#if BITCAT_THE_CHANNEL_AXIS
+	
+		int intVal = 0;
+		for ( int c = CHANNEL_COUNT-1; c >= 0; c-- ) {
+			intVal = (intVal * COLOR_MAX_VALUE) + process_color_component((*color)[c]);
+		}
+		printf("%d,", intVal);
+	#else
+		printf("(");
+		for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
+			printf("%d%s", process_color_component((*color)[c]), (c<(CHANNEL_COUNT-1))?",":"");
+		}
+		printf("),");
+	#endif
+}
+
 
 void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	printf("# start of print screen.\n");
-	float floatVal;
 	int intVal;
-	int maxVal = int_pow(2, COLOR_BIT_DEPTH);
 	for ( int y = 0; y < HEIGHT; y++ ) {
 		//printf("# start of row %d.\n", y);
 		printf("[");
@@ -165,26 +212,7 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 					printf("]\n[");
 				}
 			#endif
-		
-			printf("(");
-			for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
-				floatVal = (float) ((*screenArr)[y][x][c]);
-				#if LOG_COLORS
-					floatVal = logf(floatVal + 1.0);
-				#endif
-				floatVal = (pow(floatVal, COLOR_POWER) * COLOR_SCALE);
-				intVal = (int) floatVal;
-				#if WRAP_COLORS
-					intVal = intVal % maxVal;
-				#endif
-				intVal = max(min(intVal, maxVal-1), 0);
-				if (c < (CHANNEL_COUNT - 1)) {
-					printf("%d,", intVal);
-				} else {
-					printf("%d", intVal);
-				}
-			}
-			printf("),");
+			print_color(&((*screenArr)[y][x]));
 		}
 		printf("]\n");
 		//printf("# end of row %d.\n", y);
@@ -193,6 +221,7 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	for ( int i = 0; i < 128; i++ ) {
 		printf("# end of print screen, filler text line %d. This filler text prevents the pipe from stalling.\n", i);
 	}
+	fflush(stdin);
 	return;
 }
 
@@ -447,6 +476,7 @@ int main(int argc, char **argv) {
 	P3
 	P4
 	P5
+	P6
 	printf("# done printing args.\n");
 	assert(HEIGHT > 10);
 	assert(WIDTH > 10);
@@ -456,6 +486,8 @@ int main(int argc, char **argv) {
 	assert(to_screen_coord(from_screen_coord(177, 256), 256) - 177 < 3);
 	//printf("# %f", from_screen_coord(24, 256));
 	assert(to_screen_coord(from_screen_coord(24, 256), 256) - 24 < 8);
+	//int color[3]; color[0] = 255; color[1] = 0; color[2];
+	//printf("#
 	printf("# done with tests.\n");
 	printf("# initializing globalScreenArr...\n");
 
