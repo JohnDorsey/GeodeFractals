@@ -546,7 +546,7 @@ def get_formatted(input_data, labeled_coords, input_access_order, output_access_
 
 
 
-
+"""
 def prepare_color(color_input, channel_max_values=None):
     assert isinstance(channel_max_values, (tuple, list))
     
@@ -569,7 +569,7 @@ def prepare_color(color_input, channel_max_values=None):
 
 assert_equal(tuple(prepare_color((255, 0, 0), channel_max_values=(255, 255, 255, 255))), (255, 0, 0, 0))
 assert_equal(tuple(prepare_color(255, channel_max_values=(255, 255, 255, 255))), (255, 0, 0, 0))
-
+"""
 
 
 def split_pypng_mode(pypng_mode):
@@ -618,7 +618,7 @@ def format_pypng_mode(channel_count=None, channel_depth=None):
     assert 1 <= channel_depth <= 16, "unsupported channel bit depth."
     return channel_count_to_pypng_color_letters(channel_count) + ";" + str(channel_depth)
     
-
+"""
 def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     # assert isinstance(channel_depths, (tuple, list))
     # print("encoding row...")
@@ -629,7 +629,7 @@ def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
     channelMaxValues = [(2**channelDepth)-1]*channelCount
     result = ((item if item is not None else 0) for color in color_seq for item in assure_length_is(list(prepare_color(color, channel_max_values=channelMaxValues)), channelCount))
     return result
-
+"""
 
         
         
@@ -713,7 +713,7 @@ class PeekableGenerator:
         
 
     
-def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
+def pypng_streaming_save_square(filename, row_seq, height=None, pypng_mode="RGB;8"):
     assert height > 0, height
     assert filename.endswith(".png"), filename
     print("preparing to save file...")
@@ -730,7 +730,7 @@ def pypng_streaming_save_square(filename, row_seq, height, pypng_mode="RGB;8"):
     print("finished saving file {}.".format(finalFilename))
     
     
-def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
+def pypng_streaming_save_squares(filename, row_seq, height=None, pypng_mode="RGB;8"):
     assert height > 0, height
     assert filename.endswith(".png"), filename
     
@@ -743,7 +743,7 @@ def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
             assert isinstance(peekedRow, list)
             print("done peeking.")
             try:
-                pypng_streaming_save_square(unappend(filename, ".png") + "_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height, pypng_mode=pypng_mode)
+                pypng_streaming_save_square(unappend(filename, ".png") + "_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height=height, pypng_mode=pypng_mode)
             except TypeError as e:
                 sys.stderr.write("Exception while saving: {}.\n".format(e))
                 sys.stderr.write("The most recently peeked row looked like {} and had {} items.\n".format(preview_long_str(str(peekedRow)), len(peekedRow)))
@@ -752,15 +752,45 @@ def pypng_streaming_save_squares(filename, row_seq, height, pypng_mode="RGB;8"):
             return
     assert False
     
-"""
-if isinstance(row_seq, PeekableGenerator):
-    if not disable_peek_warning:
-        print("pypng_streaming_save_squares: warning: A peekable generator has been provided and will be used directly. This might access more items from the source sequence than necessary.")
-    peekableRowSeq = row_seq
-else:
-    peekableRowSeq = PeekableGenerator(row_seq)
-"""
+
+
+
     
+def decode_input_pixel_bitcat(input_int):
+    assert keyword_args["bitcatted-axes"] == {"c"}, "this method should not be used! settings are {}.".format(keyword_args)
+    
+    result = tuple(decode_flat_bitcat(input_int, keyword_args["channel-depth"], count=keyword_args["channel-count"]))
+    assert len(result) == keyword_args["channel-count"]
+    assert all(0 <= item < 2**keyword_args["channel-depth"] for item in result)
+    return result
+
+        
+def validate_pypng_flat_row(input_pypng_flat_row, expected_width):
+    """
+    if not len(input_pypng_flat_row) == (expected_width * keyword_args["channel-count"]):
+        return False
+    for item in input_pypng_flat_row:
+        if not (type(item) == int and item >= 0 and item < 2**keyword_args["channel-depth"]):
+            return False
+    return True
+    """
+    assure_length_is(input_pypng_flat_row, (expected_width * keyword_args["channel-count"]))
+    assert min(input_pypng_flat_row) >= 0
+    assert max(input_pypng_flat_row) < 2**keyword_args["channel-depth"]
+    assert all((type(item) == int) for item in input_pypng_flat_row)
+    
+    
+def input_row_to_pypng_flat_row(input_row, expected_width):
+    if len(keyword_args["bitcatted-axes"]) > 0:
+        if keyword_args["access-order"] != "yxc":
+            raise NotImplementedError()
+        if len(keyword_args["bitcatted-axes"]) > 1:
+            raise NotImplementedError()
+        pypngFlatRow = [component for bitcatNum in input_row for component in decode_input_pixel_bitcat(bitcatNum)]
+    else:
+        pypngFlatRow = [component for pixel in input_row for component in pixel]
+    validate_pypng_flat_row(pypngFlatRow, expected_width), (preview_long_str(str(pypngFlatRow)), keyword_args)
+    return pypngFlatRow
     
     
 @measure_time
@@ -784,41 +814,17 @@ def run_streaming():
     
     print("encoding will soon start. The settings are: {}.".format(keyword_args))
     
-    filename, channelCount, channelDepth = keyword_args["output"], keyword_args["channel-count"], keyword_args["channel-depth"]
-    pypngMode = format_pypng_mode(channel_count=channelCount, channel_depth=channelDepth)
-    
     partialRowDataGen = (eval(line) for line in peekableNotelessLineSource)
+    
     if keyword_args["row-subdivision"] > 1:
         rowAsListGen = (list(item for rowPartItemGen in gen_take_only(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
     else:
+        assert keyword_args["row-subdivision"] == 1
         rowAsListGen = (list(rowAsGen) for rowAsGen in partialRowDataGen)
-    
-    if len(keyword_args["bitcatted-axes"]) > 0:
-        if keyword_args["access-order"] != "yxc":
-            raise NotImplementedError()
-        if len(keyword_args["bitcatted-axes"]) > 1:
-            raise NotImplementedError()
-        assert keyword_args["bitcatted-axes"] == {"c"}, keyword_args
-        # rowAsBitcatListGen = rowAsListGen
-        def undoChannelBitcat(bitcatNum):
-            result = tuple(assure_less_than(component, 2**channelDepth) for component in decode_flat_bitcat(bitcatNum, channelDepth, count=channelCount))
-            assert len(result) == channelCount
-            assert max(result) < 256
-            return result
-        def processRow(row):
-            result = [undoChannelBitcat(bitcatNum) for bitcatNum in assure_length_is(row, peekedWidth)]
-            assert len(result) == peekedWidth
-            return result
-    else:
-        def processRow(row):
-            return row
             
-    # assert peekedWidth*channelCount == 1536, "!"
-    rowAsListGen = (assure_length_is(list(assure_type_is(item, int) for item in gen_encode_pypng_row(processRow(row), pypng_mode=pypngMode)), peekedWidth*channelCount) for row in rowAsListGen)
+    rowAsListGen = (input_row_to_pypng_flat_row(inputRow, peekedWidth) for inputRow in rowAsListGen)
         
-        
-    assumedHeight = peekedWidth
-    pypng_streaming_save_squares(filename, rowAsListGen, assumedHeight, pypng_mode=pypngMode)
+    pypng_streaming_save_squares(keyword_args["output"], rowAsListGen, height=peekedWidth, pypng_mode=format_pypng_mode(channel_count=keyword_args["channel-count"], channel_depth=keyword_args["channel-depth"]))
     
     
     
