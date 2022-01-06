@@ -15,7 +15,7 @@
 #define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci; //mandelbrot
 //#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15; //julia
 
-#define JOINT_BUDDHABROT 0
+#define JOINT_BUDDHABROT false
 static const bool INVERT_BUDDHABROT=false;
 
 #define Z_STARTS_AT_C 1 // setting this to 1 is absolutely necessary for julia set buddhabrot generation. Also, it shouldn't be set to zero if line segments are being drawn.
@@ -25,52 +25,64 @@ static const bool INVERT_BUDDHABROT=false;
 
 // ----- d r a w i n g   s e t t i n g s -------------------------
 
-#define DO_MEAN_OF_ZSEQ 0
+#define DRAW_MEAN_OF_ZSEQ true
 
-// #define DO_VISIT_LINE_SEGMENT 0
-#define POINTS_PER_LINE_SEGMENT 8192
-static const float LINE_SEGMENT_C_BIAS_BALANCE = 1.0;
+#define POINTS_PER_LINE_SEGMENT 512
+static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 
 #define DO_VISIT_LINE_SEGMENT (POINTS_PER_LINE_SEGMENT > 1)
-#define P2 if (DO_VISIT_LINE_SEGMENT) { assert (Z_STARTS_AT_C); assert(POINTS_PER_LINE_SEGMENT == HEIGHT); } printf("ARGUMENT --output+=%s\n", (DO_MEAN_OF_ZSEQ?"_meanofzseq":"")); if ( DO_VISIT_LINE_SEGMENT ) { printf("ARGUMENT --output+=_%dptsperseg\n", POINTS_PER_LINE_SEGMENT); }
+#define P2 if (DO_VISIT_LINE_SEGMENT) { assert (Z_STARTS_AT_C); assert(POINTS_PER_LINE_SEGMENT == HEIGHT); } printf("ARGUMENT --output+=%s\n", (DRAW_MEAN_OF_ZSEQ?"_meanofzseq":"")); if ( DO_VISIT_LINE_SEGMENT ) { printf("ARGUMENT --output+=_seg(%dpts%finitbiastoc)\n", POINTS_PER_LINE_SEGMENT, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE); }
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 8192
-#define HEIGHT 8192
-static const int ITERLIMIT=1048576; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+#define WIDTH 512
+#define HEIGHT 512
+static const int ITERLIMIT=131072; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=1;
-static const int PRINT_INTERVAL=256;
-#define DO_CLEAR_ON_OUTPUT 0
 #define OUTPUT_STRIPE_INTERVAL 1 // potential output images with index n will be _calculated and output_ only if n % (this setting) == 0.
-#define SWAP_ITER_ORDER 1
+#define DO_CLEAR_ON_OUTPUT false
+#define SWAP_ITER_ORDER false
+static const int PRINT_INTERVAL=32;
+// #define oUTPUT_STRIPE_COUNT 8
+// static const int PRINT_INTERVAL = (SWAP_ITER_ORDER?WIDTH:HEIGHT)/oUTPUT_STRIPE_COUNT;
+
 
 static const float SEEDBIAS_LOCATION_REAL = 0.0;
 static const float SEEDBIAS_LOCATION_IMAG = -2.0;
 static const float SEEDBIAS_BALANCE_REAL = 0.0;
-static const float SEEDBIAS_BALANCE_IMAG = 0.5;
+static const float SEEDBIAS_BALANCE_IMAG = 0.0;
 
-#define P3 assert(OUTPUT_STRIPE_INTERVAL >= 1); if (SWAP_ITER_ORDER) { assert(SEEDBIAS_BALANCE_IMAG != 0.0); }; 
+#define P3 assert(OUTPUT_STRIPE_INTERVAL >= 1); if (SWAP_ITER_ORDER) { assert(SEEDBIAS_BALANCE_IMAG != 0.0); }; assert(WIDTH==HEIGHT); assert(is_power_of_two(WIDTH)); assert(is_power_of_two(PRINT_INTERVAL));
 #define P4 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s_interval(%dprnt%dstripe)\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":""), PRINT_INTERVAL, OUTPUT_STRIPE_INTERVAL); if (SEEDBIAS_BALANCE_REAL != 0.0 || SEEDBIAS_BALANCE_IMAG != 0.0) { printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", SEEDBIAS_BALANCE_REAL, SEEDBIAS_LOCATION_REAL, SEEDBIAS_BALANCE_IMAG, SEEDBIAS_LOCATION_IMAG); }
+
+
+// ----- c o l o r   d r a w i n g   s e t t i n g s ---------
+#define RGB_ITERSNEEDED false
+#define RGB_COMPARE_TO_ZSEQ_MEAN true
+
+#define P5 printf("ARGUMENT --output+=%s\n", RGB_ITERSNEEDED?"_RGBitersneeded":""); printf("ARGUMENT --output+=%s\n", RGB_COMPARE_TO_ZSEQ_MEAN?"_RGBcomparetozseqmean":"");
+
+
+
 
 
 // ----- c o l o r   s e t t i n g s ----------------------
 static const int COLOR_BIT_DEPTH=8;
-#define WRAP_COLORS 0
-#define LOG_COLORS 0
-static const float COLOR_POWER=0.5;
-static const float COLOR_SCALE=0.5;
+#define WRAP_COLORS false
+#define LOG_COLORS false
+static const float COLOR_POWER=0.8;
+static const float COLOR_SCALE=1.0;
 
 static int COLOR_MAX_VALUE;
-#define P5 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH);
-#define P6 printf("ARGUMENT --channel-depth=%d\n", COLOR_BIT_DEPTH); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n"); // file name and assertions.
+#define P6 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH);
+#define P7 printf("ARGUMENT --channel-depth=%d\n", COLOR_BIT_DEPTH); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n"); // file name and assertions.
 
 
 // ------ o u t p u t   s e t t i n g s ------------
 #define OUTPUT_ROW_SUBDIVISION 1 // the number of subdivision sections (1 for whole (unsubdivided) rows).
 #define BITCAT_THE_CHANNEL_AXIS 1
 
-#define P7 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION); printf("ARGUMENT --bitcatted-axes=%s\n", (BITCAT_THE_CHANNEL_AXIS?"c":""));
+#define P8 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION); printf("ARGUMENT --bitcatted-axes=%s\n", (BITCAT_THE_CHANNEL_AXIS?"c":""));
 
 
 
@@ -80,10 +92,21 @@ static int globalScreenArr[HEIGHT][WIDTH][CHANNEL_COUNT];
 static const int ZERO=0;
 // #define BUFFER_SIZE 256
 
+#define MEAN_OF_ZSEQ_IS_NEEDED (DRAW_MEAN_OF_ZSEQ || RGB_COMPARE_TO_ZSEQ_MEAN)
+
 // ----- unnecessary settings --------------
 #define DEFAULT_PIXEL_BRIGHTNESS 0
+#define BILLION 1000000000
 
 
+// ----- ideas ------------------------------
+/*
+	-many levels of means of zseq tracked, using an array of floats, each updated by the one before it.
+	-multiple levels of line seg drawing; drawing planes, even if not uniformly bright.
+	-animations:
+		-global point drawing bias to c, lerped over time.
+	
+*/
 
 
 
@@ -135,6 +158,15 @@ int int_pow(int a, int b) {
 	return result;
 }
 
+bool is_power_of_two(int a) {
+	for ( int b = 0; b <= 32; b++ ) {
+		if ( int_pow(2, b) == a ) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int positive_modulo(int a, int b) {
     return (a%b + b)%b;
 }
@@ -183,6 +215,7 @@ void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	// const int mediumBright = int_pow(2, (int)(((float)COLOR_BIT_DEPTH) / COLOR_POWER))-1;
 	const int dim = 0;
 	int (*currentCell)[CHANNEL_COUNT];
+	printf("# entering first draw loop.\n");
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
 			currentCell = &((*screenArr)[y][x]);
@@ -212,40 +245,48 @@ void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 					+ (*screenArr)[y-2][x-1+(2*((*screenArr)[y-1][x][1]>(*screenArr)[y-1][x-1][2]))][0]
 					+ (*screenArr)[y-1][x+1][2]
 				);
-			} else if (is_in_border(y, HEIGHT, 240) || is_in_border(x, WIDTH, 240)) {
-				(*screenArr)[y+1][positive_modulo(x + (*screenArr)[y-1][x][0], WIDTH-512) + 256][0] = (*screenArr)[y-1][x][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x][2];
-				(*screenArr)[y+1][positive_modulo(0 + (*screenArr)[y-1][x][1], WIDTH-512) + 256][1] = (*screenArr)[y-1][x-1][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x+1][2];
-				
-				(*screenArr)[max(positive_modulo(x + (*screenArr)[y-1][x][2], HEIGHT-512) + 256, y+1)][positive_modulo(y + (*screenArr)[y-1][x][2], WIDTH-512) + 256][1+(y>x)] = (*screenArr)[y-1][x][0] * (*screenArr)[y-1][x][1] * (*screenArr)[y-1][x][2];
-			} else {
-				(*currentCell)[0] = 0;
-				(*currentCell)[1] = 0;
-				(*currentCell)[2] = 0;
-			}
+			} 
+			#if (WIDTH >= 1024 && HEIGHT >= 1024)
+				else if (is_in_border(y, HEIGHT, 240) || is_in_border(x, WIDTH, 240)) {
+					(*screenArr)[y+1][positive_modulo(x + (*screenArr)[y-1][x][0], WIDTH-512) + 256][0] = (*screenArr)[y-1][x][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x][2];
+					(*screenArr)[y+1][positive_modulo(0 + (*screenArr)[y-1][x][1], WIDTH-512) + 256][1] = (*screenArr)[y-1][x-1][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x+1][2];
+
+					(*screenArr)[max(positive_modulo(x + (*screenArr)[y-1][x][2], HEIGHT-512) + 256, y+1)][positive_modulo(y + (*screenArr)[y-1][x][2], WIDTH-512) + 256][1+(y>x)] = (*screenArr)[y-1][x][0] * (*screenArr)[y-1][x][1] * (*screenArr)[y-1][x][2];
+				} else {
+					(*currentCell)[0] = 0;
+					(*currentCell)[1] = 0;
+					(*currentCell)[2] = 0;
+				}
+			#endif
 		}
 	}
-	
-	int lastTrespassRed = 0;
-	int colorStepSize = 123;
-	for (int y = 0; y < HEIGHT; y++) {
-		for (int x = 0; x < WIDTH; x++) {
+	printf("# done with first draw loop.\n");
+	#if (WIDTH >= 1024 && HEIGHT >= 1024)
+		int lastTrespassRed = 999;
+		int colorStepSize = 2345;
+		int y = HEIGHT/2;
+		int x = WIDTH/2;
+		int resetCounter = (min(WIDTH,HEIGHT) - 256 - 256)/2;
+		while (true) {
 			currentCell = &((*screenArr)[y][x]);
 			if (is_in_border(y, HEIGHT, 256) || is_in_border(x, WIDTH, 256)) {
-				lastTrespassRed = max((*currentCell)[0], lastTrespassRed-16) + colorStepSize;
-				y = HEIGHT/2 + positive_modulo(y, 32);
-				x = WIDTH/2 + positive_modulo(x, 32);
+				lastTrespassRed = max((*currentCell)[0], lastTrespassRed-16) + 32;
+				y = HEIGHT/2 + positive_modulo(y, max(resetCounter,2));
+				x = WIDTH/2 + positive_modulo(x, max(resetCounter,2));
 				(*currentCell)[1] += colorStepSize;
+				resetCounter--;
 			} else {
 				(*currentCell)[2] += colorStepSize;
 				(*currentCell)[0] += lastTrespassRed; // (*currentCell)[1] + (*currentCell)[2] + 2;
-				x -= 1 + ((*currentCell)[0] % 2) == 0;
-				y -= 1 + ((*currentCell)[1]/colorStepSize % 2) == 0;
+				x += -1 + 2*(((*currentCell)[0] % 2) == 0);
+				y += -1 + 2*(((*currentCell)[1]/colorStepSize % 2) == 0);
 			}
-			if ( (*currentCell)[1] > colorStepSize*1000 || (*currentCell)[2] > colorStepSize*1000 ) {
+			if ( (*currentCell)[1] > BILLION || (*currentCell)[2] > BILLION ) {
 				goto AfterWanderLoop;
 			}
+
 		}
-	}
+	#endif
 AfterWanderLoop:
 
 	(*screenArr)[1][1][0] = bright; (*screenArr)[1][1][1] = dim; (*screenArr)[1][1][2] = dim;
@@ -278,13 +319,13 @@ int process_color_component(int inputValue) {
 void print_color(int (*color)[CHANNEL_COUNT]) {
 	
 	#if BITCAT_THE_CHANNEL_AXIS
-	
-		int intVal = 0;
+		assert(CHANNEL_COUNT*COLOR_BIT_DEPTH/8 < 8); // bitcatting can overflow.
+		long int intVal = 0;
 		for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
 			intVal = (intVal * COLOR_MAX_VALUE);
 			intVal = intVal + process_color_component((*color)[c]);
 		}
-		printf("%d,", intVal);
+		printf("%ld,", intVal);
 	#else
 		printf("(");
 		for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
@@ -316,7 +357,8 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	for ( int i = 0; i < 128; i++ ) {
 		printf("# end of print screen, filler text line %d. This filler text prevents the pipe from stalling.\n", i);
 	}
-	fflush(stdin);
+	fflush(stdin); // this doesn't seem to help.
+	
 	return;
 }
 
@@ -364,7 +406,7 @@ float from_screen_coord(int x, int screenMeasure) {
 
 
 
-int calc_mandelbrot_point(float cr, float ci) {
+int calc_mandelbrot_point_iters(float cr, float ci) {
 	#if Z_STARTS_AT_C
 		float zr=cr; float zi=ci;
 	#else
@@ -379,64 +421,70 @@ int calc_mandelbrot_point(float cr, float ci) {
 			return i;
 		}
 	}
-	return 0;
+	return -1;
 }
 
 
-
-bool jointbrot_point_should_be_skipped(float cr, float ci) {
-	/*if ( ! JOINT_BUDDHABROT ) {
-		if ( (calc_mandelbrot_point(cr, ci) <= 0) != INVERT_BUDDHABROT ) {
-			return true;
-		}
-	}
-	return false;*/
+bool jointbrot_itercount_should_be_skipped(int itercount) {
 	#if JOINT_BUDDHABROT
 		return false;
 	#else
-		if ( (calc_mandelbrot_point(cr, ci) <= 0) != INVERT_BUDDHABROT ) {
-			return true;
-		}
-		return false;
+		// itercount of 0 or -1 represents unescaped point.
+		return ( (itercount <= 0) != INVERT_BUDDHABROT );
 	#endif
+}
+
+bool jointbrot_point_should_be_skipped(float cr, float ci) {
+	return jointbrot_itercount_should_be_skipped(calc_mandelbrot_point_iters(cr, ci));
 }
 
 
 
-void visit_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float drawR, float drawI, float cr, float ci) {
+void visit_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float drawR, float drawI, bool red, bool green, bool blue) {
 	int drawX = to_screen_coord(drawR, WIDTH);
 	int drawY = to_screen_coord(drawI, HEIGHT);
 
 	if ( (drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT) ) {
 		//(drawX>=0) && (drawX<WIDTH) && (drawY>=0) && (drawY<HEIGHT)
 		//( ! (drawX>=WIDTH || drawX < 0 || drawY>=HEIGHT || drawY < 0) )
-		(*screenArr)[drawY][drawX][0] += 1;
-		if ( drawR > cr ) { (*screenArr)[drawY][drawX][1] += 1; }
-		if ( drawI > ci ) {	(*screenArr)[drawY][drawX][2] += 1;	}
+		if ( red ) { (*screenArr)[drawY][drawX][0] += 1; }
+		if ( green ) { (*screenArr)[drawY][drawX][1] += 1; }
+		if ( blue ) { (*screenArr)[drawY][drawX][2] += 1; }
 	}
 }
 
+void visit_point_compare_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float drawR, float drawI, float cr, float ci) {
+	visit_point(screenArr, drawR, drawI, true, drawR>cr, drawI>ci);
+}
 
-void visit_line_segment(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float initialDrawR, float initialDrawI, float finalDrawR, float finalDrawI, float cr, float ci) {
-	float drawR;
-	float drawI;
-	float realSpan = (finalDrawR - initialDrawR);
-	float imagSpan = (finalDrawI - initialDrawI);
-	float realInc = (realSpan/((float) POINTS_PER_LINE_SEGMENT));
-	float imagInc = (imagSpan/((float) POINTS_PER_LINE_SEGMENT));
+void visit_line_segment(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float initialDrawR, float initialDrawI, float finalDrawR, float finalDrawI, bool red, bool green, bool blue) {
+	float realInc = (finalDrawR - initialDrawR)/((float) POINTS_PER_LINE_SEGMENT); float imagInc = (finalDrawI - initialDrawI)/((float) POINTS_PER_LINE_SEGMENT);
 	for (int iii = 1; iii <= POINTS_PER_LINE_SEGMENT; iii++) {
-		drawR = initialDrawR + realInc*iii;
-		drawI = initialDrawI + imagInc*iii;
+		visit_point(screenArr, initialDrawR + realInc*iii, initialDrawI + imagInc*iii, red, green, blue);
+	}
+}
 
-		visit_point(screenArr, drawR, drawI, cr, ci);
+void visit_line_segment_compare_point(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float initialDrawR, float initialDrawI, float finalDrawR, float finalDrawI, float cr, float ci) {
+	float realInc = (finalDrawR - initialDrawR)/((float) POINTS_PER_LINE_SEGMENT); float imagInc = (finalDrawI - initialDrawI)/((float) POINTS_PER_LINE_SEGMENT);
+	for (int iii = 1; iii <= POINTS_PER_LINE_SEGMENT; iii++) {
+		visit_point_compare_point(screenArr, initialDrawR + realInc*iii, initialDrawI + imagInc*iii, cr, ci);
 	}
 }
 
 
 void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
-	if (jointbrot_point_should_be_skipped(cr, ci)) { return; }
-
+	#if RGB_ITERSNEEDED
+		bool red; bool green; bool blue;
+		assert(!JOINT_BUDDHABROT);
+		assert(!INVERT_BUDDHABROT);
+		int itercount = calc_mandelbrot_point_iters(cr, ci);
+		if ( jointbrot_itercount_should_be_skipped(itercount) ) { return; }
+		assert(itercount >= 0);
+		red = (itercount < ITERLIMIT/1024);
+		green =  (!red) && (itercount < ITERLIMIT/128);
+		blue = (!red) && (!green);
+	#endif
 	//printf("\ncr%f ci%f w%d h%d:",cr,ci,WIDTH,HEIGHT);
 	//float cAbsSquared=cr*cr + ci*ci;
 	//float zAbsSquared;
@@ -453,7 +501,10 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 	int iterationIndex;
 	
 	//optionals:
-	float zrSum = 0.0; float ziSum = 0.0;
+	#if MEAN_OF_ZSEQ_IS_NEEDED
+		float zrSum = 0.0; float ziSum = 0.0;
+		float zrMean; float ziMean;
+	#endif
 	float initialDrawR = 0.0; float initialDrawI = 0.0;
 	
 	for ( iterationIndex = 0; iterationIndex < ITERLIMIT; iterationIndex++ ) {
@@ -470,23 +521,65 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 			initialDrawR = drawR; initialDrawI = drawI;
 		#endif
 		
-		#if DO_MEAN_OF_ZSEQ
+		#if MEAN_OF_ZSEQ_IS_NEEDED
 			zrSum += zr; ziSum += zi;
-			drawR = zrSum/(ii+1.0); drawI = ziSum/(ii+1.0);
+			zrMean = zrSum/(iterationIndex+1.0); ziMean = ziSum/(iterationIndex+1.0);
+		#endif
+		
+		#if DRAW_MEAN_OF_ZSEQ
+			drawR = zrMean; drawI = ziMean;
 		#else
 			drawR = zr; drawI = zi;
 		#endif
 		
-		#if DO_VISIT_LINE_SEGMENT
-			visit_line_segment(
-				screenArr,
-				lerp(initialDrawR, cr, LINE_SEGMENT_C_BIAS_BALANCE),
-				lerp(initialDrawI, ci, LINE_SEGMENT_C_BIAS_BALANCE),
-				drawR, drawI, cr, ci
-			);
+		#if RGB_COMPARE_TO_ZSEQ_MEAN
+		
+			#if DRAW_MEAN_OF_ZSEQ // if drawing the mean of zseq, then comparing to the mean of zseq means comparing the mean of zseq to z instead!
+				#define do_jointbrot_point_DRAWN_POINT_R zrMean
+				#define do_jointbrot_point_DRAWN_POINT_I ziMean
+				assert(zrMean == drawR); assert(ziMean == drawI);
+				#define do_jointbrot_point_COMPARISON_POINT_R zr
+				#define do_jointbrot_point_COMPARISON_POINT_I zi
+			#else
+				#define do_jointbrot_point_DRAWN_POINT_R drawR
+				#define do_jointbrot_point_DRAWN_POINT_I drawI
+				#define do_jointbrot_point_COMPARISON_POINT_R zrMean
+				#define do_jointbrot_point_COMPARISON_POINT_I ziMean
+			#endif
+			
+			#if DO_VISIT_LINE_SEGMENT
+				visit_line_segment_compare_point(
+					screenArr,
+					lerp(initialDrawR, do_jointbrot_point_DRAWN_POINT_R, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
+					lerp(initialDrawI, do_jointbrot_point_DRAWN_POINT_I, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
+					do_jointbrot_point_DRAWN_POINT_R, do_jointbrot_point_DRAWN_POINT_I,  do_jointbrot_point_COMPARISON_POINT_I, do_jointbrot_point_COMPARISON_POINT_I
+				);
+			#else
+				visit_point_compare_point(screenArr,
+				do_jointbrot_point_DRAWN_POINT_R,
+				do_jointbrot_point_DRAWN_POINT_I,
+				do_jointbrot_point_COMPARISON_POINT_R,
+				do_jointbrot_point_COMPARISON_POINT_I);
+			#endif
+		
 		#else
-			visit_point(screenArr, drawR, drawI, cr, ci);
+		
+			#if RGB_ITERSNEEDED
+				assert(false); // it's not ready for some settings!
+				#if DO_VISIT_LINE_SEGMENT
+					visit_line_segment(
+						screenArr,
+						lerp(initialDrawR, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
+						lerp(initialDrawI, ci, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
+						drawR, drawI, red, green, blue
+					);
+				#else
+					visit_point(screenArr, drawR, drawI, red, green, blue);
+				#endif
+			#endif
+			
 		#endif
+		
 		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][2] += 1;
 		//printf("%f %f %d %d %d %d\n",drawR,drawI,drawX,drawY,WIDTH,HEIGHT);
 		
@@ -576,6 +669,7 @@ void build_buddhabrot(int bidirectional_supersampling, int (*screenArr)[HEIGHT][
 
 
 int main(int argc, char **argv) {
+	printf("# main started.\n");
 	assert( 9 / 10 == 0 );
 	assert( 5 / 3 == 1);
 	//assert(-5 % 3 > 0);
@@ -597,6 +691,7 @@ int main(int argc, char **argv) {
 	P5
 	P6
 	P7
+	P8
 	printf("# done printing args.\n");
 	assert(HEIGHT > 10);
 	assert(WIDTH > 10);
