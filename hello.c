@@ -15,10 +15,10 @@
 #define FRACTAL_FORMULA tmpZr = zr;	tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi + cr; zi = 2.0*tmpZr*tmpZi + ci; //mandelbrot
 //#define FRACTAL_FORMULA tmpZr = zr; tmpZi = zi; zr = tmpZr*tmpZr - tmpZi*tmpZi - 0.755; zi = 2.0*tmpZr*tmpZi + 0.15; //julia
 
-#define JOINT_BUDDHABROT 1
+#define JOINT_BUDDHABROT 0
 static const bool INVERT_BUDDHABROT=false;
 
-#define Z_STARTS_AT_C 0 // setting this to 1 is absolutely necessary for julia set buddhabrot generation.
+#define Z_STARTS_AT_C 1 // setting this to 1 is absolutely necessary for julia set buddhabrot generation. Also, it shouldn't be set to zero if line segments are being drawn.
 
 #define P1 printf("ARGUMENT --output+=_%s%s\n", (JOINT_BUDDHABROT?"jbb":(INVERT_BUDDHABROT?"abb":"bb")), (Z_STARTS_AT_C?"_zc":"_z0"));
 
@@ -27,10 +27,12 @@ static const bool INVERT_BUDDHABROT=false;
 
 #define DO_MEAN_OF_ZSEQ 0
 
-#define DO_VISIT_LINE_SEGMENT 0
-static const int POINTS_PER_LINE_SEGMENT=4096;
+// #define DO_VISIT_LINE_SEGMENT 0
+#define POINTS_PER_LINE_SEGMENT 8192
+static const float LINE_SEGMENT_C_BIAS_BALANCE = 1.0;
 
-#define P2 printf("ARGUMENT --output+=%s\n", (DO_MEAN_OF_ZSEQ?"_meanofzseq":"")); if ( DO_VISIT_LINE_SEGMENT ) { printf("ARGUMENT --output+=_%dptsperseg\n", POINTS_PER_LINE_SEGMENT); }
+#define DO_VISIT_LINE_SEGMENT (POINTS_PER_LINE_SEGMENT > 1)
+#define P2 if (DO_VISIT_LINE_SEGMENT) { assert (Z_STARTS_AT_C); assert(POINTS_PER_LINE_SEGMENT == HEIGHT); } printf("ARGUMENT --output+=%s\n", (DO_MEAN_OF_ZSEQ?"_meanofzseq":"")); if ( DO_VISIT_LINE_SEGMENT ) { printf("ARGUMENT --output+=_%dptsperseg\n", POINTS_PER_LINE_SEGMENT); }
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
@@ -39,34 +41,36 @@ static const int POINTS_PER_LINE_SEGMENT=4096;
 static const int ITERLIMIT=1048576; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=1;
 static const int PRINT_INTERVAL=256;
-#define DO_CLEAR_ON_OUTPUT 1
-#define SWAP_ITER_ORDER 0
+#define DO_CLEAR_ON_OUTPUT 0
+#define OUTPUT_STRIPE_INTERVAL 1 // potential output images with index n will be _calculated and output_ only if n % (this setting) == 0.
+#define SWAP_ITER_ORDER 1
 
-static const float seedbias_location_real = 0.0;
-static const float seedbias_location_imag = 0.0;
-static const float seedbias_balance_real = 0.0;
-static const float seedbias_balance_imag = 0.0;
+static const float SEEDBIAS_LOCATION_REAL = 0.0;
+static const float SEEDBIAS_LOCATION_IMAG = -2.0;
+static const float SEEDBIAS_BALANCE_REAL = 0.0;
+static const float SEEDBIAS_BALANCE_IMAG = 0.5;
 
-#define P3 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":"")); printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", seedbias_balance_real, seedbias_location_real, seedbias_balance_imag, seedbias_location_imag);
+#define P3 assert(OUTPUT_STRIPE_INTERVAL >= 1); if (SWAP_ITER_ORDER) { assert(SEEDBIAS_BALANCE_IMAG != 0.0); }; 
+#define P4 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s_interval(%dprnt%dstripe)\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":""), PRINT_INTERVAL, OUTPUT_STRIPE_INTERVAL); if (SEEDBIAS_BALANCE_REAL != 0.0 || SEEDBIAS_BALANCE_IMAG != 0.0) { printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", SEEDBIAS_BALANCE_REAL, SEEDBIAS_LOCATION_REAL, SEEDBIAS_BALANCE_IMAG, SEEDBIAS_LOCATION_IMAG); }
 
 
 // ----- c o l o r   s e t t i n g s ----------------------
 static const int COLOR_BIT_DEPTH=8;
 #define WRAP_COLORS 0
-#define LOG_COLORS 1
-static const float COLOR_POWER=2.0;
-static const float COLOR_SCALE=1.0;
+#define LOG_COLORS 0
+static const float COLOR_POWER=0.5;
+static const float COLOR_SCALE=0.5;
 
 static int COLOR_MAX_VALUE;
-#define P4 printf("ARGUMENT --channel-depth=%d\n", COLOR_BIT_DEPTH);
-#define P5 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n"); // file name and assertions.
+#define P5 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH);
+#define P6 printf("ARGUMENT --channel-depth=%d\n", COLOR_BIT_DEPTH); printf("ARGUMENT --output+=_color(%s%fpow%fscale%dbit%s).png\n", (LOG_COLORS?"log":""), COLOR_POWER, COLOR_SCALE, COLOR_BIT_DEPTH, (WRAP_COLORS?"wrap":"clamp")); printf("ARGUMENT --output.trimfloats\n"); // file name and assertions.
 
 
 // ------ o u t p u t   s e t t i n g s ------------
 #define OUTPUT_ROW_SUBDIVISION 1 // the number of subdivision sections (1 for whole (unsubdivided) rows).
 #define BITCAT_THE_CHANNEL_AXIS 1
 
-#define P6 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION); printf("ARGUMENT --bitcatted-axes=%s\n", (BITCAT_THE_CHANNEL_AXIS?"c":""));
+#define P7 printf("ARGUMENT --row-subdivision=%d\n", OUTPUT_ROW_SUBDIVISION); printf("ARGUMENT --bitcatted-axes=%s\n", (BITCAT_THE_CHANNEL_AXIS?"c":""));
 
 
 
@@ -99,6 +103,25 @@ int min(int a, int b) {
 	return ((a<b)? a : b);
 }
 
+int min_index_2(int a, int b) {
+	return ((a<b)? 0 : 1);
+}
+
+int min_index_4(int a, int b, int c, int d) {
+	return (min_index_2(min(a, b), min(c,d))?(2+min_index_2(c,d)):min_index_2(a,b));
+	/*
+	0 if a < min(b c d)
+	1 if b < min(a c d)
+	2 if c < min(a b d)
+	3 if d < min(a b c)
+	(something < a) * (
+		1 if b < c d or b < a c d
+		2 if c < d or c < b d or c < a b d
+		3 if ? or d < c or d < b c or d < a b c
+	)
+	*/
+}
+
 int max(int a, int b) {
 	return ((a<b)? b : a);
 }
@@ -112,9 +135,14 @@ int int_pow(int a, int b) {
 	return result;
 }
 
+int positive_modulo(int a, int b) {
+    return (a%b + b)%b;
+}
 
 
-
+float lerp(float startVal, float endVal, float balance) {
+	return (endVal*balance)+(startVal*(1.0-balance));
+}
 
 
 
@@ -133,27 +161,93 @@ void blank_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 }
 
 
+bool is_in_far_border(int v, int screenMeasure, int borderSize) {
+	assert(v >= 0 && v < screenMeasure);
+	return (v >= (screenMeasure - borderSize));
+}
+bool is_in_border(int v, int screenMeasure, int borderSize) {
+	assert(v >= 0 && v < screenMeasure);
+	return (v < borderSize || is_in_far_border(v, screenMeasure, borderSize));
+}
+int nearest_side_index(int x, int y, int width, int height) {
+	int xOpp = width - x - 1;
+	int yOpp = height - y - 1;
+	return min_index_4(y, xOpp, yOpp, x);
+}
+
+
 void draw_test_image(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 	int risingPixelsDrawn = 0;
-	// const int bright = int_pow(2, (int)(((float)COLOR_BIT_DEPTH) / COLOR_POWER))-1;
+	int integerLimit = 2147483648;
 	const int bright = 2147483646;
+	// const int mediumBright = int_pow(2, (int)(((float)COLOR_BIT_DEPTH) / COLOR_POWER))-1;
 	const int dim = 0;
+	int (*currentCell)[CHANNEL_COUNT];
 	for (int y = 0; y < HEIGHT; y++) {
 		for (int x = 0; x < WIDTH; x++) {
-			if ( y == 0 ) {
-				(*screenArr)[y][x][2] = ((x%2==0)?bright:dim); // side 1: gaps of 1.
-			} else if ( y == HEIGHT - 1 ) {
-				(*screenArr)[y][x][2] = ((x%4==0)?bright:dim); // side 3: gaps of 3.
-			} else if ( x == 0 ) {
-				(*screenArr)[y][x][1] = ((y%5==0)?bright:dim); // side 4: gaps of 4.
-			} else if ( x == WIDTH - 1 ) {
-				(*screenArr)[y][x][1] = ((y%3==0)?bright:dim); // side 2: gaps of 2.
+			currentCell = &((*screenArr)[y][x]);
+			if (is_in_border(y, HEIGHT, 8) || is_in_border(x, WIDTH, 8)) {
+				if ( y == 0 ) {
+					(*currentCell)[2] = ((x%2==0)?bright:dim); // side 1: gaps of 1.
+				} else if ( y == HEIGHT - 1 ) {
+					(*currentCell)[2] = ((x%4==0)?bright:dim); // side 3: gaps of 3.
+				} else if ( x == 0 ) {
+					(*currentCell)[1] = ((y%5==0)?bright:dim); // side 4: gaps of 4.
+				} else if ( x == WIDTH - 1 ) {
+					(*currentCell)[1] = ((y%3==0)?bright:dim); // side 2: gaps of 2.
+				} else {
+					(*currentCell)[y%3] = risingPixelsDrawn;
+					risingPixelsDrawn++;
+				}
+			} else if (is_in_border(y, HEIGHT, 32) || is_in_border(x, WIDTH, 32)) {
+				(*currentCell)[0] = (y*x);
+				(*currentCell)[1] = (y*y*x*x);
+				(*currentCell)[2] = (y*y*y*x*x*x);
+			} else if (is_in_border(y, HEIGHT, 128) || is_in_border(x, WIDTH, 129)) {
+				(*currentCell)[0] = ((*screenArr)[y-1][x-1][0] + (*screenArr)[y-1][x][0] + (*screenArr)[y-1][x+1][0]);
+				(*currentCell)[1] = (((*screenArr)[y-1][x-1][1] + (*screenArr)[y-1][x-1][2]*((y+x)*4>HEIGHT)) * ((*screenArr)[y-1][x][1] + (*screenArr)[y-1][x][2]*((y+WIDTH-x)*3>HEIGHT)) * ((*screenArr)[y-1][x+1][1]+(*screenArr)[y-1][x+1][2]*((y)*2>HEIGHT)));
+				(*currentCell)[2] = (
+					(*screenArr)[y-1][x-1][2]
+					+ (*screenArr)[y-2][x-1+(2*((*screenArr)[y-1][x][0]>(*screenArr)[y-1][x-1][1]))][1]
+					+ (*screenArr)[y-2][x-1+(2*((*screenArr)[y-1][x][1]>(*screenArr)[y-1][x-1][2]))][0]
+					+ (*screenArr)[y-1][x+1][2]
+				);
+			} else if (is_in_border(y, HEIGHT, 240) || is_in_border(x, WIDTH, 240)) {
+				(*screenArr)[y+1][positive_modulo(x + (*screenArr)[y-1][x][0], WIDTH-512) + 256][0] = (*screenArr)[y-1][x][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x][2];
+				(*screenArr)[y+1][positive_modulo(0 + (*screenArr)[y-1][x][1], WIDTH-512) + 256][1] = (*screenArr)[y-1][x-1][0] + (*screenArr)[y-1][x][1] + (*screenArr)[y-1][x+1][2];
+				
+				(*screenArr)[max(positive_modulo(x + (*screenArr)[y-1][x][2], HEIGHT-512) + 256, y+1)][positive_modulo(y + (*screenArr)[y-1][x][2], WIDTH-512) + 256][1+(y>x)] = (*screenArr)[y-1][x][0] * (*screenArr)[y-1][x][1] * (*screenArr)[y-1][x][2];
 			} else {
-				(*screenArr)[y][x][y%3] = risingPixelsDrawn;
-				risingPixelsDrawn++;
+				(*currentCell)[0] = 0;
+				(*currentCell)[1] = 0;
+				(*currentCell)[2] = 0;
 			}
 		}
 	}
+	
+	int lastTrespassRed = 0;
+	int colorStepSize = 123;
+	for (int y = 0; y < HEIGHT; y++) {
+		for (int x = 0; x < WIDTH; x++) {
+			currentCell = &((*screenArr)[y][x]);
+			if (is_in_border(y, HEIGHT, 256) || is_in_border(x, WIDTH, 256)) {
+				lastTrespassRed = max((*currentCell)[0], lastTrespassRed-16) + colorStepSize;
+				y = HEIGHT/2 + positive_modulo(y, 32);
+				x = WIDTH/2 + positive_modulo(x, 32);
+				(*currentCell)[1] += colorStepSize;
+			} else {
+				(*currentCell)[2] += colorStepSize;
+				(*currentCell)[0] += lastTrespassRed; // (*currentCell)[1] + (*currentCell)[2] + 2;
+				x -= 1 + ((*currentCell)[0] % 2) == 0;
+				y -= 1 + ((*currentCell)[1]/colorStepSize % 2) == 0;
+			}
+			if ( (*currentCell)[1] > colorStepSize*1000 || (*currentCell)[2] > colorStepSize*1000 ) {
+				goto AfterWanderLoop;
+			}
+		}
+	}
+AfterWanderLoop:
+
 	(*screenArr)[1][1][0] = bright; (*screenArr)[1][1][1] = dim; (*screenArr)[1][1][2] = dim;
 	(*screenArr)[1][2][0] = dim; (*screenArr)[1][2][1] = bright; (*screenArr)[1][2][2] = dim;
 	(*screenArr)[1][3][0] = dim; (*screenArr)[1][3][1] = dim; (*screenArr)[1][3][2] = bright;
@@ -186,8 +280,9 @@ void print_color(int (*color)[CHANNEL_COUNT]) {
 	#if BITCAT_THE_CHANNEL_AXIS
 	
 		int intVal = 0;
-		for ( int c = CHANNEL_COUNT-1; c >= 0; c-- ) {
-			intVal = (intVal * COLOR_MAX_VALUE) + process_color_component((*color)[c]);
+		for ( int c = 0; c < CHANNEL_COUNT; c++ ) {
+			intVal = (intVal * COLOR_MAX_VALUE);
+			intVal = intVal + process_color_component((*color)[c]);
 		}
 		printf("%d,", intVal);
 	#else
@@ -329,9 +424,9 @@ void visit_line_segment(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT], float in
 	float imagSpan = (finalDrawI - initialDrawI);
 	float realInc = (realSpan/((float) POINTS_PER_LINE_SEGMENT));
 	float imagInc = (imagSpan/((float) POINTS_PER_LINE_SEGMENT));
-	for (int iii = 0; iii < POINTS_PER_LINE_SEGMENT; iii++) {
-		drawR = initialDrawR + realInc*(((float) iii)+1.0);
-		drawI = initialDrawI + imagInc*(((float) iii)+1.0);
+	for (int iii = 1; iii <= POINTS_PER_LINE_SEGMENT; iii++) {
+		drawR = initialDrawR + realInc*iii;
+		drawI = initialDrawI + imagInc*iii;
 
 		visit_point(screenArr, drawR, drawI, cr, ci);
 	}
@@ -353,13 +448,13 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 	float tmpZr; float tmpZi;
 	int drawX; int drawY;
 	
-	float zrSum = 0.0; float ziSum = 0.0;
-	float drawR = 0.0; float drawI = 0.0;
+	float drawR = zr; float drawI = zi;
 	
-		/* tmpZr = zr*zr - zi*zi; tmpZi = 2.0*zr*zi;	zr = tmpZr + cr; zi = tmpZi + ci; */
 	int iterationIndex;
-	//int iii;
-	//float initialDrawR = 0.0; float finalDrawR = 0.0; float initialDrawI = 0.0; float finalDrawI = 0.0;
+	
+	//optionals:
+	float zrSum = 0.0; float ziSum = 0.0;
+	float initialDrawR = 0.0; float initialDrawI = 0.0;
 	
 	for ( iterationIndex = 0; iterationIndex < ITERLIMIT; iterationIndex++ ) {
 		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][0] += 1;
@@ -383,8 +478,12 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 		#endif
 		
 		#if DO_VISIT_LINE_SEGMENT
-			finalDrawR = drawR; finalDrawI = drawI;
-			visit_line_segment(screenArr, initialDrawR, initialDrawI, finalDrawR, finalDrawI, cr, ci);
+			visit_line_segment(
+				screenArr,
+				lerp(initialDrawR, cr, LINE_SEGMENT_C_BIAS_BALANCE),
+				lerp(initialDrawI, ci, LINE_SEGMENT_C_BIAS_BALANCE),
+				drawR, drawI, cr, ci
+			);
 		#else
 			visit_point(screenArr, drawR, drawI, cr, ci);
 		#endif
@@ -423,9 +522,6 @@ void do_mandelbrot() {
 }
 */
 
-float lerp(float startVal, float endVal, float balance) {
-	return (endVal*balance)+(startVal*(1.0-balance));
-}
 
 void build_buddhabrot(int bidirectional_supersampling, int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 
@@ -442,33 +538,56 @@ void build_buddhabrot(int bidirectional_supersampling, int (*screenArr)[HEIGHT][
 		int (*x) = &iterIA; int (*y) = &iterIB;
 	#endif
 	
+	int stripeIndex;
 	for ( iterIB = 0; iterIB < iterLimB; iterIB++ ) {
-		if ( ((iterIB % PRINT_INTERVAL) == 0) && (iterIB != 0) ) {
-			printf("# %d of %d sample %s processed.\n", iterIB, iterLimB, (SWAP_ITER_ORDER?"columns":"rows"));
+		stripeIndex = iterIB / PRINT_INTERVAL;
+		if ( (stripeIndex % OUTPUT_STRIPE_INTERVAL) != 0 ) {
+			continue;
+		}
+		
+		for ( iterIA = 0; iterIA < iterLimA; iterIA++ ) {
+			do_jointbrot_point(
+				lerp(from_screen_coord((*x), superWidth), SEEDBIAS_LOCATION_REAL, SEEDBIAS_BALANCE_REAL),
+				lerp(from_screen_coord((*y), superHeight), SEEDBIAS_LOCATION_IMAG, SEEDBIAS_BALANCE_IMAG),
+				screenArr
+			);
+			//printf("(%d,%d) ", x, y);
+		}
+		
+		if ( ((iterIB+1) % PRINT_INTERVAL) == 0 ) { // if this is the last pass through this strip:
+			printf("# %d of %d sample %s processed. end of stripe %d.\n", iterIB, iterLimB, (SWAP_ITER_ORDER?"columns":"rows"), stripeIndex);
 			print_screen(screenArr);
 			#if DO_CLEAR_ON_OUTPUT
 				blank_screen(screenArr);
 			#endif
 		}
-		for ( iterIA = 0; iterIA < iterLimA; iterIA++ ) {
-			do_jointbrot_point(
-				lerp(from_screen_coord((*x), superWidth), seedbias_location_real, seedbias_balance_real),
-				lerp(from_screen_coord((*y), superHeight), seedbias_location_imag, seedbias_balance_imag),
-				screenArr
-			);
-			//printf("(%d,%d) ", x, y);
-		}
+		
 	}
-	printf("# done building buddhabrot. printing screen one more time.\n");
+	printf("# done building buddhabrot.\n");
+	/*
+	printf("# printing screen one more time...\n");
 	print_screen(screenArr);
 	#if DO_CLEAR_ON_OUTPUT
 		blank_screen(screenArr);
 	#endif
+	*/
 }
 
 
 
 int main(int argc, char **argv) {
+	assert( 9 / 10 == 0 );
+	assert( 5 / 3 == 1);
+	//assert(-5 % 3 > 0);
+	//assert(-3 % 5 > 0);
+	
+	// assert(positive_modulo(5, -3) > 0);
+	// assert(positive_modulo(3, -5) > 0);
+	assert(positive_modulo(-5, 3) > 0);
+	assert(positive_modulo(-3, 5) > 0);
+	
+	// assert(positive_modulo(-5, -3) > 0);
+	// assert(positive_modulo(-3, -5) > 0);
 	printf("# hello.c running.\n");
 	P0
 	P1
@@ -477,6 +596,7 @@ int main(int argc, char **argv) {
 	P4
 	P5
 	P6
+	P7
 	printf("# done printing args.\n");
 	assert(HEIGHT > 10);
 	assert(WIDTH > 10);
@@ -501,6 +621,7 @@ int main(int argc, char **argv) {
 	print_screen(&globalScreenArr);
 	blank_screen(&globalScreenArr);
 	printf("# done with test image.");
+	
 	build_buddhabrot(BIDIRECTIONAL_SUPERSAMPLING, &globalScreenArr);
 	//do_mandelbrot(SUPERSAMPLING, &globalScreenArr);
 	// return 0;
