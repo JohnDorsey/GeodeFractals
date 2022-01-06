@@ -33,7 +33,7 @@ static const bool INVERT_BUDDHABROT=false;
 #define ITERSLIDE_REAL 0.0
 #define ITERSLIDE_IMAG 0.0
 
-#define POINTS_PER_LINE_SEGMENT 2048
+#define POINTS_PER_LINE_SEGMENT 8192
 static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 
 #define DO_VISIT_LINE_SEGMENT (POINTS_PER_LINE_SEGMENT > 1)
@@ -41,14 +41,14 @@ static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 2048
-#define HEIGHT 2048
-static const int ITERLIMIT=128; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+#define WIDTH 8192
+#define HEIGHT 8192
+static const int ITERLIMIT=48; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=1;
 #define OUTPUT_STRIPE_INTERVAL 1 // potential output images with index n will be _calculated and output_ only if n % (this setting) == 0.
 #define DO_CLEAR_ON_OUTPUT false
 #define SWAP_ITER_ORDER false
-static const int PRINT_INTERVAL=32;
+static const int PRINT_INTERVAL=1024;
 // #define oUTPUT_STRIPE_COUNT 8
 // static const int PRINT_INTERVAL = (SWAP_ITER_ORDER?WIDTH:HEIGHT)/oUTPUT_STRIPE_COUNT;
 
@@ -79,7 +79,7 @@ static const int COLOR_BIT_DEPTH=8;
 #define WRAP_COLORS false
 #define LOG_COLORS false
 static const float COLOR_POWER=0.5;
-static const float COLOR_SCALE=1.0;
+static const float COLOR_SCALE=0.25;
 
 static int COLOR_MAX_VALUE;
 #define P6 assert(COLOR_SCALE > 0.001); COLOR_MAX_VALUE=int_pow(2, COLOR_BIT_DEPTH);
@@ -358,14 +358,14 @@ void print_screen(int (*screenArr)[HEIGHT][WIDTH][CHANNEL_COUNT]) {
 				}
 			#endif
 			currentCell = &((*screenArr)[y][x]);
-			maxScreenVal = max((*currentCell)[0], max((*currentCell)[1], (*currentCell)[2]));
+			maxScreenVal = max(maxScreenVal, max((*currentCell)[0], max((*currentCell)[1], (*currentCell)[2])));
 			print_color(currentCell);
 		}
 		printf("]\n");
 		//printf("# end of row %d.\n", y);
 	}
 	printf("# end of print screen.\n");
-	printf("# maximum screen value before conversion was %d.\n", maxScreenVal);
+	printf("# maximum screen value before conversion was %d. after processing, this value would be%d.\n", maxScreenVal, process_color_component(maxScreenVal));
 	for ( int i = 0; i < 128; i++ ) {
 		printf("# end of print screen, filler text line %d. This filler text prevents the pipe from stalling.\n", i);
 	}
