@@ -2,16 +2,16 @@
 
 
 """
-    todo:
-        -core:
-            -replace builtin eval with a custom evaluator that has good error handling and no size limit.
-        -etc:
-            -accept pam files as input and as an output format.
-            -user-defined kernels:
-                -transform data in transit to another application.
-                -output in multiple resolutions:
-                    -use threads around pypng image.save.
-                    -use subprocesses.
+    todo (details):
+        -replace builtin eval with a custom evaluator that has good error handling and no size limit.
+        -accept pam files as input and as an output format.
+    todo (design):
+        -user-defined kernels:
+            -generate new channels not present in the input, <with|without> <resizing|padding|reformatting>.
+            -allow new channels to be different sizes and still have their data be streamed synchronously or bundled.
+        -there should be a good way to configure the flow of channel data between processes (such as './programWithNineChannelOutput | ./photo.py --passthrough "channels012.png"  -| ./photo.py --passthrough "channels345.png" - | ./photo.py "channels678.png" -';)
+            -this and UD kernels for resampling handle multiple output resolutions, and another program may allow monitoring of progress using a pygame window.
+
 """
 
 import sys
@@ -20,35 +20,24 @@ print(sys.argv[0] + " started.")
 
 import math
 import itertools
-import time
 import collections
+import time
 import copy
 
-generator = type((i for i in range(1)))
+from Trisigns import *
     
 import png
 
-EXIT_CODES = {"success":0, "help":0, "no-args":0, "unknown-keyword-arg":20, "unknown-keyword-arg-operator":21, "unknown-keyword-arg-operation":22, "not-implemented-error": 50, "crash":51}
+generator = type((i for i in range(1)))
+
+EXIT_CODES = {
+    "success":0, "help":0, "no-args":0,
+    "unknown-keyword-arg":20, "unknown-keyword-arg-operator":21, "unknown-keyword-arg-operation":22,
+    "not-implemented-error": 50, "crash":51,
+}
 
 
 
-def assert_equal(thing0, thing1):
-    assert thing0 == thing1, "{} does not equal {}.".format(thing0, thing1)
-
-def assure_less_than(thing0, thing1):
-    assert thing0 < thing1, "{} is not less than {}.".format(thing0, thing1)
-    return thing0
-
-
-def gen_take_only(input_gen, count):
-    for i in range(count):
-        try:
-            currentItem = next(input_gen)
-        except StopIteration:
-            return
-        yield currentItem
-    return
-    
 
 
 def preview_long_str(input_str):
@@ -58,16 +47,29 @@ def preview_long_str(input_str):
         return input_str
     else:
         return (input_str[:leftLen] + "...{}chrs...".format(len(input_str)-leftLen-rightLen) + input_str[-rightLen:])
-        
-    
-    
+
+
+def assert_equal(thing0, thing1):
+    assert thing0 == thing1, "{} does not equal {}.".format(thing0, thing1)
+
+
+def assure_less_than(thing0, thing1):
+    assert thing0 < thing1, "{} is not less than {}.".format(thing0, thing1)
+    return thing0
+
+
 def assure_length_is(input_container, length):
     assert len(input_container) == length, "the input container {} is {} items long, not the required {}.".format(preview_long_str(str(input_container)), len(input_container), length)
     return input_container
     
+    
 def assure_type_is(input_object, type_):
     assert type(input_object) == type_, type(input_object)
     return input_object
+
+
+
+
 
     
     
@@ -83,6 +85,8 @@ def gen_make_inexhaustible(input_gen):
     while True:
         # yield copy.deepcopy(item)
         yield item
+
+
 
 
 def unappend(string, suffix):
@@ -110,14 +114,19 @@ def monitor_gen(input_gen, nickname):
         print("{} is being asked for another item.".format(nickname))
 
 
-def measure_time(input_fun):
-    def alt_fun(*args, **kwargs):
-        startTime=time.time()
-        input_fun(*args, **kwargs)
-        endTime=time.time()
-        totalTime = endTime-startTime
-        print("took {} seconds ({} minutes).".format(totalTime, totalTime/60))
-    return alt_fun
+def measure_time_nicknamed(nickname):
+    if not isinstance(nickname, str):
+        raise TypeError("this decorator requires a string argument for a nickname to be included in the decorator line using parenthesis.")
+    def measure_time_nicknamed_inner(input_fun):
+        def measure_time_nicknamed_inner_inner(*args, **kwargs):
+            startTime=time.time()
+            result = input_fun(*args, **kwargs)
+            endTime=time.time()
+            totalTime = endTime-startTime
+            print("{} took {} s ({} m)({} h).".format(nickname, totalTime, int(totalTime/60), int(totalTime/60/60)))
+            return result
+        return measure_time_nicknamed_inner_inner
+    return measure_time_nicknamed_inner
 
     
     
@@ -152,7 +161,8 @@ def product(input_seq):
     return result
 
 
-def shape(data_to_test):
+def shape_of(data_to_test):
+    raise NotImplementedError("replace with string-safe version")
     result = []
     while hasattr(data_to_test, "__len__"):
         result.append(len(data_to_test))
@@ -162,7 +172,8 @@ def shape(data_to_test):
     return result
     
     
-def labled_shape(data_to_test, access_order):
+def labled_shape_of(data_to_test, access_order):
+    raise NotImplementedError("replace with string-safe version")
     result = dict()
     while hasattr(data_to_test, "__len__"):
         assert access_order[0] not in result
@@ -171,88 +182,32 @@ def labled_shape(data_to_test, access_order):
     return result
 
 
-def trisign(value):
-    """
-    if value < 0:
-        return -1
-    elif value > 0:
-        return 1
-    else:
-        assert value == 0
-        return 0
-    """
-    return compare(0, value)
-        
-def compare(a, b):
-    if a < b:
-        return 1
-    elif a > b:
-        return -1
-    else:
-        assert a == b
-        return 0
 
 
-def number_trisign_weakly_describes_order(a, b, number_to_compare):
-    return trisign_weakly_describes_order(a, b, trisign(number_to_compare))
 
-def trisign_weakly_describes_order(a, b, sign_to_compare):
-    """
-    if a == b:
-        return True
-    if sign_to_compare == 1:
-        return a < b
-    elif sign_to_compare == -1:
-        return a > b
-    elif sign_to_compare == 0:
-        return a
-    """
-    assert sign_to_compare in {-1, 0, 1}
-    comparison = compare(a, b)
-    if comparison == 0:
-        return True
-    elif sign_to_compare == 0:
-        return False
-    return sign_to_compare == comparison
-    
-assert all(trisign_weakly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,1),(5,5,0),(5,5,-1),(5,4,-1)])
-assert all((not trisign_weakly_describes_order(*testVals)) for testVals in [(5,6,0),(5,6,-1),(5,4,1),(5,4,0)])
-
-
-def number_trisign_strongly_describes_order(a, b, number_to_compare):
-    return trisign_strongly_describes_order(a, b, trisign(number_to_compare))
-
-def trisign_strongly_describes_order(a, b, sign_to_compare):
-    """
-    if sign_to_compare == 1:
-        return a < b
-    elif sign_to_compare == 0:
-        return a == b
-    elif sign_to_compare == -1:
-        return a > b
-    else:
-        raise ValueError("sign.")
-    """
-    assert sign_to_compare in {-1, 0, 1}
-    return sign_to_compare == compare(a, b)
-
-assert all(trisign_strongly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,0),(5,4,-1)])
-assert all((not trisign_strongly_describes_order(*testVals)) for testVals in [(5,5,1),(5,5,-1), (5,6,0),(5,6,-1), (5,4,1),(5,4,0)])
-
+print("note: these higher_range functions should be replaced with their cleaner implementations in more recent projects.")
 
 def higher_range(input_list, iteration_order=None):
     if iteration_order is not None:
         newInputList = [None for i in range(len(input_list))]
         for i, newLocation in enumerate(iteration_order):
             newInputList[newLocation] = input_list[i]
-        for item in higher_range(newInputList, iteration_order=None):
+        for item in higher_range_linear(newInputList):
             yield tuple(item[iteration_order[i]] for i in range(len(iteration_order)))
+    else:
+        for item in higher_range_linear(input_list):
+            yield item
+    
+    
+def higher_range_linear(input_list):
+
     settings_list = [None for i in range(len(input_list))]
     
     # validate and expand settings:
     for i, item in enumerate(input_list):
         newItem = None
         if type(item) == int:
+            assert item >= 0
             newItem = (0,item,1)
         elif type(item) == tuple:
             if len(item) == 2:
@@ -266,9 +221,11 @@ def higher_range(input_list, iteration_order=None):
             raise NotImplementedError("this method can't test for range ends when moving backwards yet.")
         settings_list[i] = newItem
     assert None not in settings_list
+    #print(settings_list)
         
     counters = [settings_list[i][0] for i in range(len(input_list))]
     while True:
+        #print(tuple(counters))
         yield tuple(counters)
         counters[0] += settings_list[0][2]
         #if (counters[0] >= settings_list[0][1]): # change to incorporate signed diffs.
@@ -281,11 +238,14 @@ def higher_range(input_list, iteration_order=None):
                     continue
                 else:
                     break # no more rollovers should happen.
-            else:
+            else: # if not broken:
                 return
     assert False
 
-assert_equal([item for item in higher_range([(5,8), (1,4)])], [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
+assert not number_trisign_weakly_describes_order(8, 5, 1)
+assert number_trisign_weakly_describes_order(8, 8, 1)
+assert_equal(list(higher_range_linear([(5,8), (1,4)])), [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
+assert_equal(list(higher_range([(5,8), (1,4)])), [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
 
 
 def shared_items_are_consecutive(input_list, input_set, require_immediate_start=False):
@@ -383,14 +343,11 @@ assert_equal(encode_flat_bitcat([7, 6, 5, 4, 3, 2, 1, 0, 1, 2], 3), int("111_110
 assert_equal(encode_flat_bitcat([6,7]*10, 3), int("110111"*10, 2))
 
 
-
 def encode_deep_bitcat(input_data, leaf_bit_depth):
     itemGen = gen_assuredly_in_group(flatten_and_assure_axial_uniform_depth(input_data), (lambda testItem: isinstance(testItem, int)), True)
     return encode_flat_bitcat(itemGen, leaf_bit_depth)
     
 assert_equal(encode_deep_bitcat([(7, 6), [(5, 4), (3, 2)], (1, 0), (1, 2)], 3), int("111_110_101_100_011_010_001_000_001_010", 2))
-
-
 
 
 def decode_flat_bitcat(input_data, item_bit_depth, count=None):
@@ -415,7 +372,6 @@ def gen_accumulate_product(input_seq):
     return itertools.accumulate(input_seq, lambda a, b: a*b)
 
 
-
 def get_in_uniform_flat_bitcat(input_data, item_bit_length=None, significance_index=None):
     assert item_bit_length >= 1
     assert significance_index is not None
@@ -432,33 +388,72 @@ assert_equal([get_in_uniform_flat_bitcat(testNum, item_bit_length=8, significanc
 del testArr, testNum
 
 
-def get_in_uniform_deep_bitcat(input_data, labeled_coords, access_order, labeled_axis_sizes, leaf_bit_length):
+def flatten_coordinates(labeled_coords, access_order, labeled_axis_sizes):
     flatIndexRange = product(labeled_axis_sizes[axisLabel] for axisLabel in access_order)
     # axisLabelAndScopeSizeGen = itertools.accumulate(((axisLabel, labeled_axis_sizes[axisLabel]) for axisLabel in access_order[::-1]), lambda workingPair,)...
     axisSizeGen = (labeled_axis_sizes[axisLabel] for axisLabel in access_order[::-1])
     axisLabelAndWorthGen = zip(access_order[::-1], gen_accumulate_product(itertools.chain([1], axisSizeGen)))
     flatIndex = sum(labeled_coords[axisLabel]*axisWorth for axisLabel, axisWorth in axisLabelAndWorthGen)
+    return (flatIndex, flatIndexRange)
+
+
+def get_in_uniform_deep_bitcat(input_data, labeled_coords, access_order, labeled_axis_sizes, leaf_bit_length):
+    flatIndex, flatIndexRange = flatten_coordinates(labeled_coords, access_order, labeled_axis_sizes)
     flatSignificanceIndex = flatIndexRange - flatIndex - 1
     return get_in_uniform_flat_bitcat(input_data, item_bit_length=leaf_bit_length, significance_index=flatSignificanceIndex)
+
+"""
+def get_in_uniform_deep_bitcat(input_data, labeled_coords, access_order, labeled_axis_sizes, leaf_bit_length):
+    assert len(access_order) >= 1
+    accessIndex, accessIndexMaximum = access_order[0], labeled_axis_sizes[access_order[0]]
+    significanceIndex = (accessIndexMaximum - accessIndex - 1)
     
+    if len(access_order) == 1:
+        return get_in_uniform_flat_bitcat(input_data, item_bit_length=leaf_bit_length, significance_index=significanceIndex)
+        
+    subBitcatIntBitLength = leaf_bit_length * reduce(operator.mul, (labeled_axis_sizes[label] for label in access_order[1:]), 1) # room for optimization by caching this.
+    subBitcatInt = get_in_uniform_flat_index(input_data, subBitcatIntBitLength, significanceIndex)
+    return get_in_uniform_deep_bitcat(subBitcatInt, labeled_coords, access_order[1:], labeled_axis_sizes, leaf_bit_length)
+"""
+
 testArr = [[0,0,1], [16,64,192], [255,254,128], [127,126,1]]
 testNum = encode_deep_bitcat(testArr, 8)
 assert_equal([[get_in_uniform_deep_bitcat(testNum, {"x":x, "y":y}, "yx", {"y":4, "x":3}, leaf_bit_length=8) for x in range(3)] for y in range(4)], testArr)
 del testArr, testNum
     
 
-def get_at_advanced(input_data, labeled_coords, access_order, bitcatted_axes={}, digested_axes={}, labeled_axis_sizes=None):
+
+
+def get_at_advanced_uniform(input_data, labeled_coords, access_order, bitcatted_axes=set(), digested_axes=set(), labeled_axis_sizes=None, leaf_bit_length=None):
     if len(bitcatted_axes) > 0:
+        assert leaf_bit_length is not None
         assert shared_items_are_consecutive(access_order[::-1], bitcatted_axes, require_immediate_start=True), "bitcatted_axes much not have any gaps when compared to access order."
         assert labeled_axis_sizes is not None, "axis sizes must be provided to undo bit concatenation."
         assert all(label in labeled_axis_sizes for label in bitcatted_axes), "not enough info."
-        bitcatInt = get_at_advanced(input_data, labeled_coords, access_order[:-len(bitcatted_axes)], digested_axes=digested_axes, labeled_axis_sizes=labeled_axis_sizes)
-        raise NotImplementedError("not finished.")
+        bitcatInt = get_at_advanced_uniform(input_data, labeled_coords, access_order[:-len(bitcatted_axes)], digested_axes=digested_axes, labeled_axis_sizes=labeled_axis_sizes)
+        result = get_in_uniform_deep_bitcat(bitcatInt, labeled_coords, access_order[-len(bitcatted_axes):], labeled_axis_sizes, leaf_bit_length)
+        return result
+        
     if len(digested_axes) > 0:
-        for digestedAxis in digested_axes:
-            assert digestedAxis not in bitcatted_axes, "a bitcatted axis is stored as an integer, and can't be digested - bitcatting more than one axis is only possible by bitcatting both an axis and its parent axis."
-        raise NotImplementedError("what goes here?")
-    raise NotImplementedError()
+        assert digested_axes.isdisjoint(bitcatted_axes), "a bitcatted axis is stored as an integer, and can't be digested - bitcatting more than one axis is possible by bitcatting both an axis and its parent axis."
+        if access_order[0] in digested_axes:
+            raise ValueError("outermost axis ({}) can't be digested!".format(access_order[0]))
+        upcomingDigestedAxes = [itertools.takewhile((lambda x: x in digested_axes), access_order[1:])] # getting the upcoming digested access count this way prevents the error of an axis being digested that isn't in the access order from needing to be handled, and may also stop it from being recognized... so digesting x in data[y][x] leads to an incorrect result when asking for data with a specified y but no specified x.
+        
+        if len(upcomingDigestedAxes) != 0:
+            flatIndex, flatIndexRange = flatten_coordinates(labled_coords, access_order[:len(upcomingDigestedAxisCount)+1], labeled_axis_sizes)
+            newCallInputData = input_data[flatIndex]
+            newCallAccessOrder = access_order[len(upcomingDigestedAxisCount)+1:]
+        else:
+            newCallInputData = input_data[labled_coords[access_order[0]]]
+            newCallAccessOrder = access_order[1:]
+        
+        assert len(bitcatted_axes) == 0 # just a check before excluding.
+        assert leaf_bit_length is None # just a check before excluding.
+        result = get_at_advanced_uniform(newCallInputData, labeled_coords, newCallAccessOrder, digested_axes=digested_axes, labeled_axis_sizes=labeled_axis_sizes)
+        return result
+        
+    return get_at(input_data, labeled_coords, access_order)
             
 
 def get_at(input_data, labeled_coords, access_order):
@@ -580,32 +575,6 @@ def split_pypng_mode(pypng_mode):
     return [channelLetters, bitDepth]
 
 
-"""
-
-def gen_bytes_in_shorts(shorts_seq):
-    # this should be replaced by a general method for converting between word sizes.
-    for item in shorts_seq:
-        assert isinstance(item, int)
-        assert item >= 0
-        assert item < 65536
-        yield item // 256
-        yield item % 256
-        
-def color_to_pypng_byteints(input_color, pypng_mode="RGB;8"):
-    # this might not be needed at all.
-    channelLetters, bitDepth = split_pypng_mode(pypng_mode)
-    
-    assert len(input_color) == len(channelLetters), "bad color length."
-    
-    if bitDepth == 16:
-        return gen_bytes_in_shorts(input_color)
-    elif bitDepth == 8:
-        for item in input_color:
-            assert 0 <= item < 256
-            yield item
-    else:
-        raise NotImplementedError("can't convert at this bit depth to bytes for encoding.")
-"""
 
 
 def channel_count_to_pypng_color_letters(count):
@@ -645,7 +614,7 @@ def gen_encode_pypng_row(color_seq, pypng_mode="RGB;8"):
 def gen_file_lines(source_file=sys.stdin):
         
     for i in itertools.count():
-        print("waiting for line {}.".format(i))
+        #print("waiting for line {}.".format(i))
         nextLine = source_file.readline()
         """
         nextLineChars = []
@@ -658,9 +627,9 @@ def gen_file_lines(source_file=sys.stdin):
         nextLine = "".join(nextLineChars)
         """
         if nextLine.startswith("#"):
-            print("line {} is {}.".format(i, nextLine[:-1]))
+            print("line {} is {}.".format(i, repr(nextLine)))
         else:
-            print("line {} is {}.".format(i, preview_long_str(nextLine[:-1])))
+            print("line {} is {}.".format(i, preview_long_str(repr(nextLine))))
         
         # if nextLine.startswith("#"):
         #     continue
@@ -677,7 +646,7 @@ def gen_file_lines(source_file=sys.stdin):
         #if i == count:
         #    print("line will not be supplied")
         # print("yielding plaintext line.")
-        assert nextLine.endswith("\n"), "it actually ends {}.".format(nextLine[-8:])
+        assert nextLine.endswith("\n"), "it actually ends {}.".format(repr(nextLine[-8:]))
         yield nextLine[:-1]
 
         
@@ -695,7 +664,11 @@ class PeekableGenerator:
     def peek_at_relative(self, index):
         assert index >= 0
         while len(self.fridge) <= index:
-            self._unlock_once()
+            try:
+                self._unlock_once()
+            except StopIteration as si:
+                raise StopIteration("possible error: couldn't peek at relative index {}. fridge length was {}.".format(index, len(self.fridge))) from None
+                
         return self.fridge[index]
         
     def __next__(self):
@@ -711,21 +684,37 @@ class PeekableGenerator:
     def __iter__(self):
         return self
         
+"""
+class StreamingImageWriter:
+    def __init__(self):
+        raise NotImplementedError("not defined in subclass.")
+    def preload_tuple_row_seq(self, row_seq):
+        raise NotImplementedError("not defined in subclass.")
+    def set_filename(self, filename):
+        raise NotImplementedError("not defined in subclass.")
+        
+class PypngStreamingImageWriter(StreamingImageWriter):
+    def __init__(self, width, height, channel_count, channel_bit_depth):
+        self.width, self.height, self.channel_count, self.channel_bit_depth = width, height, channel_count, channel_bit_depth
+    def preload_tuple_row_seq(self, row_seq):
+        ...
+"""
 
-    
-def pypng_streaming_save_square(filename, row_seq, height=None, pypng_mode="RGB;8"):
-    assert height > 0, height
-    assert filename.endswith(".png"), filename
+def pypng_streaming_save_image(filename, row_seq, width=None, height=None, pypng_mode="RGB;8"):
+    if not height > 0:
+        raise ValueError("illegal height {}".format(height))
+    if not width > 0:
+        raise ValueError("illegal width {}".format(width))
+    if not filename.endswith(".png"):
+        raise ValueError("filename must end with '.png'")
+        
     print("preparing to save file...")
     row_seq = gen_make_inexhaustible(row_seq) # prevent pypng from ever running out of lines.
-    row_seq = gen_take_only(row_seq, height) # prevent pypng from having too many lines, which is not allowed.
-    # row_seq = monitor_gen(row_seq, "(row_seq for this image)")
+    row_seq = itertools.islice(row_seq, height) # prevent pypng from having too many lines, which is not allowed.
     print("initializing file...")
-    image = png.from_array(row_seq, mode=pypng_mode, info={"width":height, "height":height})
+    image = png.from_array(row_seq, mode=pypng_mode, info={"width":width, "height":height})
     finalFilename = unappend(filename, ".png") + "_" + str(time.time()) + ".png"
-    print("finished initializing file.")
-    # return image
-    print("saving file {}...".format(finalFilename))
+    print("finished initializing, now saving file {}...".format(finalFilename))
     image.save(finalFilename)
     print("finished saving file {}.".format(finalFilename))
     
@@ -742,8 +731,11 @@ def pypng_streaming_save_squares(filename, row_seq, height=None, pypng_mode="RGB
             peekedRow = peekableRowSeq.peek_at_relative(0) # may raise StopIteration.
             assert isinstance(peekedRow, list)
             print("done peeking.")
+            squareImageName = unappend(filename, ".png") + "_{}px{}inseq.png".format(height, str(i).rjust(5,"0"))
             try:
-                pypng_streaming_save_square(unappend(filename, ".png") + "_{}px{}inseq.png".format(height, str(i).rjust(5,"0")), peekableRowSeq, height=height, pypng_mode=pypng_mode)
+                (measure_time_nicknamed("(save square {})".format(i)))(pypng_streaming_save_image)(
+                    squareImageName, peekableRowSeq, width=height, height=height, pypng_mode=pypng_mode,
+                )
             except TypeError as e:
                 sys.stderr.write("Exception while saving: {}.\n".format(e))
                 sys.stderr.write("The most recently peeked row looked like {} and had {} items.\n".format(preview_long_str(str(peekedRow)), len(peekedRow)))
@@ -793,7 +785,12 @@ def input_row_to_pypng_flat_row(input_row, expected_width):
     return pypngFlatRow
     
     
-@measure_time
+    
+    
+    
+
+    
+@measure_time_nicknamed("run_streaming")
 def run_streaming():
     
     simpleLineSource = gen_file_lines()
@@ -817,7 +814,7 @@ def run_streaming():
     partialRowDataGen = (eval(line) for line in peekableNotelessLineSource)
     
     if keyword_args["row-subdivision"] > 1:
-        rowAsListGen = (list(item for rowPartItemGen in gen_take_only(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
+        rowAsListGen = (list(item for rowPartItemGen in itertools.islice(gen_make_inexhaustible(partialRowDataGen), keyword_args["row-subdivision"]) for item in rowPartItemGen) for i in itertools.count())
     else:
         assert keyword_args["row-subdivision"] == 1
         rowAsListGen = (list(rowAsGen) for rowAsGen in partialRowDataGen)
@@ -829,17 +826,21 @@ def run_streaming():
     
     
     
+    
+    
+    
+    
+    
+    
+    
+    
 def get_after_match(text_to_match, arg_to_test):
     if arg_to_test.startswith(text_to_match):
         return arg_to_test[len(text_to_match):]
-        
+
+
 def get_after_keyword_match(name_to_match, arg_to_test, separator="="):
     return get_after_match("--" + name_to_match + separator, arg_to_test)
-
-
-
-
-
 
 
 
@@ -856,6 +857,7 @@ def overwrite_matches_left(input_list, index, test_value, new_value):
                 return i + 1
             else:
                 return None
+                
                 
 def trim_floats_in_str(input_str):
     digits = {str(i) for i in range(10)}
@@ -974,7 +976,10 @@ prog_args = sys.argv[1:]
 
 keyword_arg_descriptions = {
     "access-order": "yxc in whatever order they must be applied to access the smallest data item in the input data.",
-    "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel."
+    "swizzle": "[r][g][b][l][a], where each string position affects a corresponding output channel, and the letter at that position defines which input channel should be written to the output channel.",
+    "bitcatted-axes": "the set of axis lables for the axes of input data whose items do not have delimiter symbols, but are instead padded to the same length and concatenated.",
+    "row-subdivision": "positive integer, number of input lines per row.",
+    "channel-count": "manually specified channel count is necessary when bitcatted axes includes the color channel axis.",
 }  
 
 keyword_args = {"input":"", "output":"", "access-order": "yxc", "bitcatted-axes":set(), "swizzle": None, "row-subdivision":1, "channel-count":3, "channel-depth":8} #"untitled{}.png".format(time.time())
@@ -991,7 +996,10 @@ optional arguments:
 there are some others but they aren't documented yet."""
 
 
-        
+
+
+
+
 
 
 if len(sys.argv[0]) > 0: # if being run as a command:

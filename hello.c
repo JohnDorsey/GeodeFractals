@@ -28,12 +28,12 @@ static const bool INVERT_BUDDHABROT=false;
 // ----- d r a w i n g   s e t t i n g s -------------------------
 
 #define DRAW_MEAN_OF_ZSEQ true
-#define ITERSCALE_REAL 1.02
-#define ITERSCALE_IMAG 1.02
+#define ITERSCALE_REAL 1.0
+#define ITERSCALE_IMAG 1.0
 #define ITERSLIDE_REAL 0.0
 #define ITERSLIDE_IMAG 0.0
 
-#define POINTS_PER_LINE_SEGMENT 8192
+#define POINTS_PER_LINE_SEGMENT 1
 static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 
 #define DO_VISIT_LINE_SEGMENT (POINTS_PER_LINE_SEGMENT > 1)
@@ -43,12 +43,12 @@ static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 // ----- c a n v a s   s e t t i n g s -----------------------
 #define WIDTH 256
 #define HEIGHT 256
-static const int ITERLIMIT=48; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
-static const int BIDIRECTIONAL_SUPERSAMPLING=1;
+static const int ITERLIMIT=1024; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
+static const int BIDIRECTIONAL_SUPERSAMPLING=4;
 #define OUTPUT_STRIPE_INTERVAL 1 // potential output images with index n will be _calculated and output_ only if n % (this setting) == 0.
 #define DO_CLEAR_ON_OUTPUT false
 #define SWAP_ITER_ORDER false
-static const int PRINT_INTERVAL=128;
+static const int PRINT_INTERVAL=512;
 // #define oUTPUT_STRIPE_COUNT 8
 // static const int PRINT_INTERVAL = (SWAP_ITER_ORDER?WIDTH:HEIGHT)/oUTPUT_STRIPE_COUNT;
 
@@ -535,16 +535,11 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 		if ( (zr*zr + zi*zi) > 16.0 ) {
 			return;
 		}
-		#if (ITERSCALE_REAL != 1.0)
-			#define djp_intermediate_APPLY_ITERSCALE_REAL(real_input) real_input * pow(ITERSCALE_REAL, iterationIndex)
-		#else
-			#define djp_intermediate_APPLY_ITERSCALE_REAL(real_input) real_input
-		#endif
-		#if (ITERSCALE_IMAG != 1.0)
-			#define djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) imag_input * pow(ITERSCALE_IMAG, iterationIndex)
-		#else
-			#define djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) imag_input
-		#endif
+		
+		#define djp_intermediate_APPLY_ITERSCALE_REAL(real_input) real_input * pow(ITERSCALE_REAL, iterationIndex)
+
+		#define djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) imag_input * pow(ITERSCALE_IMAG, iterationIndex)
+		
 		#define djp_APPLY_ITERMORPH_REAL(real_input) djp_intermediate_APPLY_ITERSCALE_REAL(real_input) + iterationIndex*ITERSLIDE_REAL 
 		#define djp_APPLY_ITERMORPH_IMAG(imag_input) djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) + iterationIndex*ITERSLIDE_IMAG // separating out iterslide isn't needed for performance because multiplying by a hardcoded zero should compile to not needing to do the multiplication or addition.
 		#define djp_APPLY_LINESEG_INIT_BIAS_REAL(real_input) lerp(real_input, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE)
@@ -609,7 +604,7 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 				);
 			#endif
 		
-		#elseif RGB_ITERSNEEDED
+		#elif RGB_ITERSNEEDED
 			assert(false); // it's not ready for some settings!
 			assert(ITERSLIDE_REAL == 0.0 && ITERSLIDE_IMAG == 0.0); // definitely not ready for these!
 			assert(ITERSCALE_REAL == 1.0 && ITERSCALE_IMAG == 1.0); // definitely not ready for these!
