@@ -41,23 +41,23 @@ static const float LINE_SEGMENT_INITIAL_C_BIAS_BALANCE = 0.0;
 
 
 // ----- c a n v a s   s e t t i n g s -----------------------
-#define WIDTH 8192
-#define HEIGHT 8192
+#define WIDTH 256
+#define HEIGHT 256
 static const int ITERLIMIT=48; //iterlimit is put in this settings category because it has a big impact on image brightness, so other things here need to be adjusted accordingly.
 static const int BIDIRECTIONAL_SUPERSAMPLING=1;
 #define OUTPUT_STRIPE_INTERVAL 1 // potential output images with index n will be _calculated and output_ only if n % (this setting) == 0.
 #define DO_CLEAR_ON_OUTPUT false
 #define SWAP_ITER_ORDER false
-static const int PRINT_INTERVAL=1024;
+static const int PRINT_INTERVAL=128;
 // #define oUTPUT_STRIPE_COUNT 8
 // static const int PRINT_INTERVAL = (SWAP_ITER_ORDER?WIDTH:HEIGHT)/oUTPUT_STRIPE_COUNT;
 
 
 
-static const float SEEDBIAS_LOCATION_REAL = 0.0;
-static const float SEEDBIAS_LOCATION_IMAG = -2.0;
-static const float SEEDBIAS_BALANCE_REAL = 0.0;
-static const float SEEDBIAS_BALANCE_IMAG = 0.0;
+#define SEEDBIAS_LOCATION_REAL 0.0
+#define SEEDBIAS_LOCATION_IMAG -2.0
+#define SEEDBIAS_BALANCE_REAL 0.0
+#define SEEDBIAS_BALANCE_IMAG 0.0
 
 #define P3 assert(OUTPUT_STRIPE_INTERVAL >= 1); if (SWAP_ITER_ORDER) { assert(SEEDBIAS_BALANCE_IMAG != 0.0); }; assert(WIDTH==HEIGHT); assert(is_power_of_two(WIDTH)); assert(is_power_of_two(PRINT_INTERVAL));
 #define P4 printf("ARGUMENT --output+=_%ditr%dbisuper%s%s_interval(%dprnt%dstripe)\n", ITERLIMIT, BIDIRECTIONAL_SUPERSAMPLING, (DO_CLEAR_ON_OUTPUT?"_clearonout":""), (SWAP_ITER_ORDER?"_swapiterorder":""), PRINT_INTERVAL, OUTPUT_STRIPE_INTERVAL); if (SEEDBIAS_BALANCE_REAL != 0.0 || SEEDBIAS_BALANCE_IMAG != 0.0) { printf("ARGUMENT --output+=_seedbias(%fto%fand%fto%fi)\n", SEEDBIAS_BALANCE_REAL, SEEDBIAS_LOCATION_REAL, SEEDBIAS_BALANCE_IMAG, SEEDBIAS_LOCATION_IMAG); }
@@ -508,16 +508,13 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 		green =  (!red) && (itercount < ITERLIMIT/128);
 		blue = (!red) && (!green);
 	#endif
-	//printf("\ncr%f ci%f w%d h%d:",cr,ci,WIDTH,HEIGHT);
-	//float cAbsSquared=cr*cr + ci*ci;
-	//float zAbsSquared;
+	
 	#if Z_STARTS_AT_C
 		float zr=cr; float zi=ci;
 	#else
 		float zr=0.0; float zi=0.0;
 	#endif
 	float tmpZr; float tmpZi;
-	int drawX; int drawY;
 	
 	float drawR = zr; float drawI = zi;
 	float comparisonPointR = 0.0; float comparisonPointI = 0.0;
@@ -529,29 +526,34 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 		float zrSum = 0.0; float ziSum = 0.0;
 		float zrMean; float ziMean;
 	#endif
+	
 	float previousDrawR = 0.0; float previousDrawI = 0.0;
 	float previousComparisonPointR; float previousComparisonPointI;
 	
 	for ( iterationIndex = 0; iterationIndex < ITERLIMIT; iterationIndex++ ) {
-		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][0] += 1;
-		//printf("iter%d starts zr=%f zi=%f.", iterationIndex, zr, zi);
 		FRACTAL_FORMULA
-		//printf("now zr=%f zi=%f.",zr,zi);
 		if ( (zr*zr + zi*zi) > 16.0 ) {
 			return;
 		}
-		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][1] += 1;
-		
-		
-		#define djp_REAL_ITERMORPH_FORMULA * pow(ITERSCALE_REAL, iterationIndex) + iterationIndex*ITERSLIDE_REAL
-		#define djp_IMAG_ITERMORPH_FORMULA * pow(ITERSCALE_IMAG, iterationIndex) + iterationIndex*ITERSLIDE_IMAG
-		
+		#if (ITERSCALE_REAL != 1.0)
+			#define djp_intermediate_APPLY_ITERSCALE_REAL(real_input) real_input * pow(ITERSCALE_REAL, iterationIndex)
+		#else
+			#define djp_intermediate_APPLY_ITERSCALE_REAL(real_input) real_input
+		#endif
+		#if (ITERSCALE_IMAG != 1.0)
+			#define djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) imag_input * pow(ITERSCALE_IMAG, iterationIndex)
+		#else
+			#define djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) imag_input
+		#endif
+		#define djp_APPLY_ITERMORPH_REAL(real_input) djp_intermediate_APPLY_ITERSCALE_REAL(real_input) + iterationIndex*ITERSLIDE_REAL 
+		#define djp_APPLY_ITERMORPH_IMAG(imag_input) djp_intermediate_APPLY_ITERSCALE_IMAG(imag_input) + iterationIndex*ITERSLIDE_IMAG // separating out iterslide isn't needed for performance because multiplying by a hardcoded zero should compile to not needing to do the multiplication or addition.
+		#define djp_APPLY_LINESEG_INIT_BIAS_REAL(real_input) lerp(real_input, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE)
+		#define djp_APPLY_LINESEG_INIT_BIAS_IMAG(imag_input) lerp(imag_input, ci, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE)
 		
 		#if MEAN_OF_ZSEQ_IS_NEEDED
 			zrSum += zr; ziSum += zi;
 			zrMean = zrSum/(iterationIndex+1.0); ziMean = ziSum/(iterationIndex+1.0);
 		#endif
-		
 		
 		#if DO_VISIT_LINE_SEGMENT
 			previousDrawR = drawR;
@@ -564,9 +566,8 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 			drawR = zr;
 			drawI = zi;
 		#endif
-		drawR = drawR djp_REAL_ITERMORPH_FORMULA;
-		drawI = drawI djp_IMAG_ITERMORPH_FORMULA;
-		
+		drawR = djp_APPLY_ITERMORPH_REAL(drawR);
+		drawI = djp_APPLY_ITERMORPH_IMAG(drawI);
 		
 		#if RGB_COMPARE_TO_ZSEQ_MEAN
 		
@@ -581,14 +582,17 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 				comparisonPointR = zrMean;
 				comparisonPointI = ziMean;
 			#endif
-			comparisonPointR = comparisonPointR djp_REAL_ITERMORPH_FORMULA;
-			comparisonPointI = comparisonPointI djp_IMAG_ITERMORPH_FORMULA;
+			comparisonPointR = djp_APPLY_ITERMORPH_REAL(comparisonPointR);
+			comparisonPointI = djp_APPLY_ITERMORPH_IMAG(comparisonPointI);
+		#endif
+		
+		#if RGB_COMPARE_TO_ZSEQ_MEAN
 			
 			#if DO_VISIT_LINE_SEGMENT
 				visit_line_segment_compare_line_segment(
 					screenArr,
-					lerp(previousDrawR, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
-					lerp(previousDrawI, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
+					djp_APPLY_LINESEG_INIT_BIAS_REAL(previousDrawR),
+					djp_APPLY_LINESEG_INIT_BIAS_IMAG(previousDrawI),
 					drawR,
 					drawI,
 					previousComparisonPointR,
@@ -598,37 +602,34 @@ void do_jointbrot_point(float cr, float ci, int (*screenArr)[HEIGHT][WIDTH][CHAN
 				);
 			#else
 				visit_point_compare_point(screenArr,
-				drawR,
-				drawI,
-				comparisonPointR,
-				comparisonPointI);
+					drawR,
+					drawI,
+					comparisonPointR,
+					comparisonPointI
+				);
 			#endif
 		
-		#else
-		
-			#if RGB_ITERSNEEDED
-				assert(false); // it's not ready for some settings!
-				assert(ITERSLIDE_REAL == 0.0 && ITERSLIDE_IMAG == 0.0); // definitely not ready for these!
-				assert(ITERSCALE_REAL == 1.0 && ITERSCALE_IMAG == 1.0); // definitely not ready for these!
-				#if DO_VISIT_LINE_SEGMENT
-					visit_line_segment(
-						screenArr,
-						lerp(previousDrawR, cr, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
-						lerp(previousDrawI, ci, LINE_SEGMENT_INITIAL_C_BIAS_BALANCE),
-						drawR, drawI, red, green, blue
-					);
-				#else
-					visit_point(screenArr, drawR, drawI, red, green, blue);
-				#endif
+		#elseif RGB_ITERSNEEDED
+			assert(false); // it's not ready for some settings!
+			assert(ITERSLIDE_REAL == 0.0 && ITERSLIDE_IMAG == 0.0); // definitely not ready for these!
+			assert(ITERSCALE_REAL == 1.0 && ITERSCALE_IMAG == 1.0); // definitely not ready for these!
+			#if DO_VISIT_LINE_SEGMENT
+				visit_line_segment(
+					screenArr,
+					djp_APPLY_LINESEG_INIT_BIAS_REAL(previousDrawR),
+					djp_APPLY_LINESEG_INIT_BIAS_IMAG(previousDrawI),
+					drawR,
+					drawI,
+					red, green, blue
+				);
 			#else
-				printf("# not implemented!\n");
-				assert(false);
+				visit_point(screenArr, drawR, drawI, red, green, blue);
 			#endif
-			
+		#else
+			printf("# not implemented!\n");
+			assert(false);
 		#endif
 		
-		//(*screenArr)[iterationIndex % HEIGHT][iterationIndex % WIDTH][2] += 1;
-		//printf("%f %f %d %d %d %d\n",drawR,drawI,drawX,drawY,WIDTH,HEIGHT);
 		
 	}
 	return;
