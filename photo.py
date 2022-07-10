@@ -229,11 +229,11 @@ def higher_range_linear(input_list):
         yield tuple(counters)
         counters[0] += settings_list[0][2]
         #if (counters[0] >= settings_list[0][1]): # change to incorporate signed diffs.
-        if number_trisign_weakly_describes_order(settings_list[0][1], counters[0], settings_list[0][2]):
+        if number_trisign_weakly_describes_order(settings_list[0][2], pair=(settings_list[0][1], counters[0])):
             counters[0] = settings_list[0][0]
             for rolloverIndex in range(1, len(counters)):
                 counters[rolloverIndex] += settings_list[rolloverIndex][2]
-                if number_trisign_weakly_describes_order(settings_list[rolloverIndex][1], counters[rolloverIndex], settings_list[rolloverIndex][2]):
+                if number_trisign_weakly_describes_order(settings_list[rolloverIndex][2], pair=(settings_list[rolloverIndex][1], counters[rolloverIndex])):
                     counters[rolloverIndex] = settings_list[rolloverIndex][0]
                     continue
                 else:
@@ -242,8 +242,8 @@ def higher_range_linear(input_list):
                 return
     assert False
 
-assert not number_trisign_weakly_describes_order(8, 5, 1)
-assert number_trisign_weakly_describes_order(8, 8, 1)
+assert not number_trisign_weakly_describes_order(1, (8, 5))
+assert number_trisign_weakly_describes_order(1, (8, 8))
 assert_equal(list(higher_range_linear([(5,8), (1,4)])), [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
 assert_equal(list(higher_range([(5,8), (1,4)])), [(5,1), (6,1), (7,1), (5,2), (6,2), (7,2), (5,3), (6,3), (7,3)])
 

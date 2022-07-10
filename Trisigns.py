@@ -1,4 +1,4 @@
-def trisign(value):
+def trisign_of(value):
     return compare(0, value)
         
 def compare(a, b):
@@ -12,7 +12,8 @@ def compare(a, b):
 
 
 
-def trisign_weakly_describes_order(a, b, trisign_to_compare):
+def trisign_weakly_describes_order(trisign_to_compare, pair):
+    a, b = pair
     """
     if a == b:
         return True
@@ -32,15 +33,16 @@ def trisign_weakly_describes_order(a, b, trisign_to_compare):
         return False
     return trisign_to_compare == comparison
     
-assert all(trisign_weakly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,1),(5,5,0),(5,5,-1),(5,4,-1)])
-assert all((not trisign_weakly_describes_order(*testVals)) for testVals in [(5,6,0),(5,6,-1),(5,4,1),(5,4,0)])
+assert all(trisign_weakly_describes_order(*testVals) for testVals in [(1,(5,6)),(1,(5,5)),(0,(5,5)),(-1,(5,5)),(-1,(5,4))])
+assert all((not trisign_weakly_describes_order(*testVals)) for testVals in [(0,(5,6)),(-1,(5,6)),(1,(5,4)),(0,(5,4))])
 
 
-def number_trisign_weakly_describes_order(a, b, number_to_compare):
-    return trisign_weakly_describes_order(a, b, trisign(number_to_compare))
+def number_trisign_weakly_describes_order(number_to_compare, pair):
+    return trisign_weakly_describes_order(trisign_of(number_to_compare), pair)
 
 
-def trisign_strongly_describes_order(a, b, trisign_to_compare):
+def trisign_strongly_describes_order(trisign_to_compare, pair):
+    a, b = pair
     """
     if sign_to_compare == 1:
         return a < b
@@ -54,9 +56,9 @@ def trisign_strongly_describes_order(a, b, trisign_to_compare):
     assert trisign_to_compare in {-1, 0, 1}
     return trisign_to_compare == compare(a, b)
 
-assert all(trisign_strongly_describes_order(*testVals) for testVals in [(5,6,1),(5,5,0),(5,4,-1)])
-assert all((not trisign_strongly_describes_order(*testVals)) for testVals in [(5,5,1),(5,5,-1), (5,6,0),(5,6,-1), (5,4,1),(5,4,0)])
+assert all(trisign_strongly_describes_order(*testVals) for testVals in [(1,(5,6)),(0,(5,5)),(-1,(5,4))])
+assert all((not trisign_strongly_describes_order(*testVals)) for testVals in [(1,(5,5)),(-1,(5,5)), (0,(5,6)),(-1,(5,6)), (1,(5,4)),(0,(5,4))])
 
 
-def number_trisign_strongly_describes_order(a, b, number_to_compare):
-    return trisign_strongly_describes_order(a, b, trisign(number_to_compare))
+def number_trisign_strongly_describes_order(number_to_compare, pair):
+    return trisign_strongly_describes_order(trisign_of(number_to_compare), pair)
