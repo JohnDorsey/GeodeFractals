@@ -23,6 +23,8 @@ import itertools
 import collections
 import time
 import copy
+import functools
+import operator
 
 from Trisigns import *
     
@@ -153,12 +155,14 @@ def split_once(string, delimiter):
     assert len(result) == 2
     return result
     
-
+"""
 def product(input_seq):
     result = 1
     for item in input_seq:
         result *= item
     return result
+"""
+product = (lambda input_seq: functools.reduce(operator.mul, input_seq))
 
 
 def shape_of(data_to_test):
@@ -1002,10 +1006,10 @@ there are some others but they aren't documented yet."""
 
 
 
-if len(sys.argv[0]) > 0: # if being run as a command:
+if __name__ == "__main__": # if being run as a command:
     cli_main()
 else:
-    print("Not in interactive mode.")
+    print("photo.py is not in interactive mode.")
     
 
 
